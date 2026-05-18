@@ -200,6 +200,9 @@ int main() {
                     for (auto& planet : solarSystem.getPlanets()) {
                         ImGui::BulletText("%s", planet->getName().c_str());
                     }
+                    if (auto* moon = solarSystem.getMoon()) {
+                        ImGui::BulletText("%s", moon->getName().c_str());
+                    }
 
                     ImGui::Spacing();
                     ImGui::Separator();

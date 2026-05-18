@@ -16,9 +16,11 @@ public:
     void update(const class Time& time);
     void drawAll(Camera& camera, float aspectRatio);
 
-    CelestialBody* getSun()  { return m_star.get(); }
-    const Star*    getStar() const { return m_star.get(); }
+    CelestialBody* getSun()     { return m_star.get(); }
+    CelestialBody* getEarth()   { return m_earth; }
+    const Star*    getStar()    const { return m_star.get(); }
     const std::vector<std::unique_ptr<Planet>>& getPlanets() const { return m_planets; }
+    Planet*        getMoon()    const { return m_moon.get(); }
 
     void  setTimeScale(float scale);
     float getTimeScale() const { return m_timeScale; }
@@ -27,7 +29,9 @@ public:
 private:
     std::unique_ptr<Star>                m_star;
     std::vector<std::unique_ptr<Planet>> m_planets;
+    std::unique_ptr<Planet>              m_moon;
     std::vector<std::unique_ptr<Orbit>>  m_orbits;
+    CelestialBody*                       m_earth = nullptr;
 
     Shader m_planetShader;
     Shader m_sunShader;

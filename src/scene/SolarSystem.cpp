@@ -42,6 +42,26 @@ SolarSystem::SolarSystem() {
                Constants::URANUS_ORBIT_PERIOD,  Constants::URANUS_ROT_PERIOD,  Constants::URANUS_TILT});
     addPlanet({"Neptune",  Constants::NEPTUNE_RADIUS,  Constants::NEPTUNE_ORBIT,
                Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT});
+
+    // Find Earth pointer for Moon parent
+    for (auto& p : m_planets) {
+        if (p->getName() == "Earth") {
+            m_earth = p.get();
+            break;
+        }
+    }
+
+    // --- Moon ---
+    {
+        CelestialParams m;
+        m.name               = "Moon";
+        m.radius             = Constants::MOON_RADIUS;
+        m.orbitRadius        = Constants::MOON_ORBIT;
+        m.orbitPeriodDays    = Constants::MOON_ORBIT_PERIOD;
+        m.rotationPeriodHours = Constants::MOON_ROT_PERIOD;
+        m_moon = std::make_unique<Planet>(m);
+        m_moon->setParent(m_earth);
+    }
 }
 
 void SolarSystem::update(const Time& time) {
@@ -49,6 +69,7 @@ void SolarSystem::update(const Time& time) {
     for (auto& planet : m_planets) {
         planet->update(time);
     }
+    m_moon->update(time);
 }
 
 void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
@@ -76,6 +97,7 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
     for (auto& planet : m_planets) {
         planet->draw(m_planetShader);
     }
+    m_moon->draw(m_planetShader);
 }
 
 void SolarSystem::setTimeScale(float scale) {

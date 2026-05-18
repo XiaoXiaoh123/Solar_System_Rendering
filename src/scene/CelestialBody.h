@@ -33,12 +33,15 @@ public:
     glm::mat4          getModelMatrix()   const;
     const CelestialParams& getParams()    const { return m_params; }
 
+    void setParent(CelestialBody* parent) { m_parent = parent; }
+
 protected:
     CelestialParams m_params;
     Mesh            m_mesh;
     Texture         m_texture;
     float           m_orbitAngle     = 0.0f;
     float           m_rotationAngle  = 0.0f;
-    float           m_orbitSpeed     = 0.0f;  // rad/s (sim time, pre-scaled)
-    float           m_rotationSpeed  = 0.0f;  // rad/s (sim time, pre-scaled)
+    float           m_orbitSpeed     = 0.0f;
+    float           m_rotationSpeed  = 0.0f;
+    CelestialBody*  m_parent         = nullptr;
 };

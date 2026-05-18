@@ -50,6 +50,12 @@ constexpr float URANUS_RADIUS       = 12.0f;
 constexpr float NEPTUNE_ORBIT       = 540.0f;
 constexpr float NEPTUNE_RADIUS      = 11.5f;
 
+// --- Moon ---
+constexpr float MOON_ORBIT          = 7.0f;
+constexpr float MOON_RADIUS         = 0.8f;
+constexpr float MOON_ORBIT_PERIOD   = 27.32f;
+constexpr float MOON_ROT_PERIOD     = 27.32f;  // tidally locked
+
 // --- Real orbital periods (Earth days) ---
 constexpr float MERCURY_ORBIT_PERIOD  = 87.97f;
 constexpr float VENUS_ORBIT_PERIOD    = 224.70f;

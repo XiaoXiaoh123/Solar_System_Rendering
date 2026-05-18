@@ -49,32 +49,41 @@ void CelestialBody::update(const Time& time) {
 }
 
 glm::vec3 CelestialBody::getWorldPosition() const {
-    if (m_params.orbitRadius <= 0.0f) {
-        return glm::vec3(0.0f);
+    // Must match model matrix convention: R_y(angle) maps (R,0,0) → (R·cos, 0, -R·sin)
+    glm::vec3 localPos(0.0f);
+    if (m_params.orbitRadius > 0.0f) {
+        localPos = glm::vec3(
+             cos(m_orbitAngle) * m_params.orbitRadius,
+             0.0f,
+            -sin(m_orbitAngle) * m_params.orbitRadius
+        );
     }
-    return glm::vec3(
-        cos(m_orbitAngle) * m_params.orbitRadius,
-        0.0f,
-        sin(m_orbitAngle) * m_params.orbitRadius
-    );
+    if (m_parent) {
+        return m_parent->getWorldPosition() + localPos;
+    }
+    return localPos;
 }
 
 glm::mat4 CelestialBody::getModelMatrix() const {
     glm::mat4 model = glm::mat4(1.0f);
 
+    // Outermost: parent world offset (applied last in GLM → first on vertex)
+    if (m_parent) {
+        model = glm::translate(model, m_parent->getWorldPosition());
+    }
+
+    // Orbit around local center (R_orbit * T_orbitRadius)
     if (m_params.orbitRadius > 0.0f) {
-        // GLM: model = model * newMatrix, so v' = model * v.
-        // We want: 1) translate to orbit, 2) rotate around origin.
-        //   model = R_orbit * T_orbit
-        //   v' = R_orbit * T_orbit * v → translate then orbit
         model = glm::rotate(model, m_orbitAngle, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::translate(model, glm::vec3(m_params.orbitRadius, 0.0f, 0.0f));
     }
 
+    // Axial tilt
     if (m_params.axialTilt != 0.0f) {
         model = glm::rotate(model, glm::radians(m_params.axialTilt), glm::vec3(0.0f, 0.0f, 1.0f));
     }
 
+    // Innermost: self rotation
     model = glm::rotate(model, m_rotationAngle, glm::vec3(0.0f, 1.0f, 0.0f));
     return model;
 }
