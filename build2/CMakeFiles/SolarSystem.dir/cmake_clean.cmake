@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/SolarSystem.dir/main.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/main.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/core/Camera.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/core/Camera.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/core/Input.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/core/Input.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/core/Time.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/core/Time.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/core/Window.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/core/Window.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/Mesh.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/Mesh.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/Renderer.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/Renderer.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/Shader.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/Shader.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/Skybox.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/Skybox.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/SphereMesh.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/SphereMesh.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/render/Texture.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/render/Texture.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/scene/CelestialBody.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/scene/CelestialBody.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/scene/Orbit.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/scene/Orbit.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/scene/Planet.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/scene/Planet.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/scene/SolarSystem.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/scene/SolarSystem.cpp.obj.d"
+  "CMakeFiles/SolarSystem.dir/src/scene/Star.cpp.obj"
+  "CMakeFiles/SolarSystem.dir/src/scene/Star.cpp.obj.d"
+  "SolarSystem.exe"
+  "SolarSystem.exe.manifest"
+  "SolarSystem.pdb"
+  "libSolarSystem.dll.a"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/SolarSystem.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
