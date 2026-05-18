@@ -16,6 +16,7 @@ public:
     void        swapBuffers();
     void        pollEvents();
     void        setCursorDisabled(bool disabled);
+    void        updateFramebufferSize();
     int         getWidth()  const { return m_width; }
     int         getHeight() const { return m_height; }
     float       getAspectRatio() const;

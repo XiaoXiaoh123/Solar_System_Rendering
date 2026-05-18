@@ -4,10 +4,7 @@
 Planet::Planet(const CelestialParams& params) : CelestialBody(params) {}
 
 void Planet::draw(Shader& shader) {
-    shader.setVec3("uLightPos", glm::vec3(0.0f)); // sun at origin
-    shader.setVec3("uLightColor", glm::vec3(1.0f, 0.95f, 0.8f));
-    shader.setFloat("uAmbientStrength", 0.08f);
-    shader.setVec3("uViewPos", glm::vec3(0.0f)); // set by renderer via shader
-
+    // Uniforms (uLightPos, uLightColor, uAmbientStrength, uViewPos) are set
+    // by SolarSystem::drawAll — do NOT override them here.
     CelestialBody::draw(shader);
 }

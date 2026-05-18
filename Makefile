@@ -22,6 +22,14 @@ GLAD_SRC  := thirdparty/glad/src/glad.c
 GLAD_OBJ  := $(BUILD_DIR)/glad.o
 
 # --- Project sources ---
+IMGUI_DIR := thirdparty/imgui
+IMGUI_SRCS := $(IMGUI_DIR)/imgui.cpp \
+              $(IMGUI_DIR)/imgui_draw.cpp \
+              $(IMGUI_DIR)/imgui_tables.cpp \
+              $(IMGUI_DIR)/imgui_widgets.cpp \
+              $(IMGUI_DIR)/imgui_impl_glfw.cpp \
+              $(IMGUI_DIR)/imgui_impl_opengl3.cpp
+
 SRCS := main.cpp \
         $(SRC_DIR)/core/Window.cpp \
         $(SRC_DIR)/core/Camera.cpp \
@@ -37,7 +45,8 @@ SRCS := main.cpp \
         $(SRC_DIR)/scene/Planet.cpp \
         $(SRC_DIR)/scene/Star.cpp \
         $(SRC_DIR)/scene/Orbit.cpp \
-        $(SRC_DIR)/scene/SolarSystem.cpp
+        $(SRC_DIR)/scene/SolarSystem.cpp \
+        $(IMGUI_SRCS)
 
 OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS))
 

@@ -1,4 +1,5 @@
 #include "Time.h"
+#include "../utils/Constants.h"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 
@@ -19,7 +20,7 @@ void Time::reset() {
 }
 
 void Time::setTimeScale(float scale) {
-    m_timeScale = std::clamp(scale, 0.0f, 1000.0f);
+    m_timeScale = std::clamp(scale, Constants::MIN_TIME_SCALE, Constants::MAX_TIME_SCALE);
 }
 
 float Time::getGlobalTime() {

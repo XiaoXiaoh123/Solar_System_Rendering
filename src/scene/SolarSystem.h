@@ -18,9 +18,11 @@ public:
 
     CelestialBody* getSun()  { return m_star.get(); }
     const Star*    getStar() const { return m_star.get(); }
+    const std::vector<std::unique_ptr<Planet>>& getPlanets() const { return m_planets; }
 
     void  setTimeScale(float scale);
     float getTimeScale() const { return m_timeScale; }
+    void  setAmbientStrength(float s) { m_ambientStrength = s; }
 
 private:
     std::unique_ptr<Star>                m_star;
@@ -30,5 +32,6 @@ private:
     Shader m_planetShader;
     Shader m_sunShader;
 
-    float m_timeScale = 1.0f;
+    float m_timeScale        = 1.0f;
+    float m_ambientStrength = 0.08f;
 };

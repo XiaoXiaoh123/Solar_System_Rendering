@@ -8,6 +8,10 @@ static void glfwErrorCallback(int error, const char* description) {
     std::cerr << "[GLFW Error " << error << "] " << description << std::endl;
 }
 
+static void framebufferSizeCallback(GLFWwindow* /*window*/, int width, int height) {
+    glViewport(0, 0, width, height);
+}
+
 Window::Window(int width, int height, const std::string& title)
     : m_width(width), m_height(height)
 {
@@ -30,6 +34,13 @@ Window::Window(int width, int height, const std::string& title)
 
     glfwMakeContextCurrent(m_window);
     glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    // Track actual framebuffer size (may differ from window size on HiDPI)
+    glfwGetFramebufferSize(m_window, &m_width, &m_height);
+    glViewport(0, 0, m_width, m_height);
+
+    // Resize callback keeps viewport in sync with window
+    glfwSetFramebufferSizeCallback(m_window, framebufferSizeCallback);
 }
 
 Window::~Window() {
@@ -54,6 +65,10 @@ void Window::pollEvents() {
 void Window::setCursorDisabled(bool disabled) {
     glfwSetInputMode(m_window, GLFW_CURSOR,
         disabled ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+void Window::updateFramebufferSize() {
+    glfwGetFramebufferSize(m_window, &m_width, &m_height);
 }
 
 float Window::getAspectRatio() const {
