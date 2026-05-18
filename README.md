@@ -70,28 +70,51 @@ mingw32-make run
 
 ```
 Solar_System_Rendering/
-├── main.cpp                     # 入口，主循环 + ImGui 面板
-├── Makefile                     # MinGW 构建配置
-├── CMakeLists.txt               # CMake 备选构建
-├── assets/shaders/              # GLSL 着色器
-│   ├── planet.vert/frag        #   行星（Blinn-Phong + FragPos 着色）
-│   ├── sun.vert/frag           #   太阳（自发光 + 菲涅尔）
-│   ├── skybox.vert/frag        #   天空盒（Cubemap）
-│   └── orbit.vert/frag         #   轨道线
-├── src/
-│   ├── core/                    # Window（含 resize 回调）、Camera、Input、Time
-│   ├── render/                  # Shader、Mesh、Texture、SphereMesh、Skybox、Renderer
-│   ├── scene/                   # CelestialBody、Planet、Star、Orbit、SolarSystem
-│   ├── lighting/                # PointLight
-│   └── utils/                   # Constants（真实天文数据 + 缩放参数）
-├── thirdparty/                  # 第三方库（源码随项目分发）
-│   ├── glfw_src/                #   GLFW 3.4
-│   ├── glad/                    #   GLAD (OpenGL 4.6 Core)
-│   ├── glm/                     #   GLM 1.0.1
-│   ├── stb/                     #   stb_image
-│   └── imgui/                   #   Dear ImGui 1.91
+├── main.cpp
+├── Makefile
+├── CMakeLists.txt
 ├── README.md
-└── 技术方案.md
+├── 技术方案.md
+├── assets/
+│   └── shaders/
+│       ├── orbit.vert / orbit.frag
+│       ├── planet.vert / planet.frag
+│       ├── skybox.vert / skybox.frag
+│       └── sun.vert / sun.frag
+├── src/
+│   ├── core/
+│   │   ├── Camera.h / .cpp
+│   │   ├── Input.h / .cpp
+│   │   ├── Time.h / .cpp
+│   │   └── Window.h / .cpp
+│   ├── lighting/
+│   │   └── PointLight.h
+│   ├── render/
+│   │   ├── Mesh.h / .cpp
+│   │   ├── Renderer.h / .cpp
+│   │   ├── Shader.h / .cpp
+│   │   ├── Skybox.h / .cpp
+│   │   ├── SphereMesh.h / .cpp
+│   │   └── Texture.h / .cpp
+│   ├── scene/
+│   │   ├── CelestialBody.h / .cpp
+│   │   ├── Orbit.h / .cpp
+│   │   ├── Planet.h / .cpp
+│   │   ├── SolarSystem.h / .cpp
+│   │   └── Star.h / .cpp
+│   └── utils/
+│       └── Constants.h
+└── thirdparty/
+    ├── glad/
+    │   ├── include/
+    │   │   ├── glad/gl.h
+    │   │   ├── glad/glad.h
+    │   │   └── KHR/khrplatform.h
+    │   └── src/glad.c
+    ├── glfw_src/          (GLFW 3.4 源码)
+    ├── glm/               (GLM 1.0.1, header-only)
+    ├── imgui/             (Dear ImGui 1.91 + backends)
+    └── stb/stb_image.h
 ```
 
 ## 关键实现细节
