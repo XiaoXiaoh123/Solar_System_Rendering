@@ -16,6 +16,8 @@ struct CelestialParams {
     float       rotationPeriodHours = 0.0f; // real rotation period in hours
     float       axialTilt         = 0.0f;   // degrees
     std::string texturePath;
+    bool        hasAtmosphere     = false;
+    float       atmosphereScale   = 1.05f;   // atmosphere radius = planet radius * scale
 };
 
 class CelestialBody {
@@ -25,6 +27,7 @@ public:
 
     virtual void update(const Time& time);
     virtual void draw(Shader& shader);
+    virtual void drawAtmosphere(Shader& shader);
 
     const std::string& getName()        const { return m_params.name; }
     float              getOrbitAngle()  const { return m_orbitAngle; }
@@ -49,4 +52,9 @@ protected:
     float           m_rotationSpeed          = 0.0f;
     float           m_rotationSpeedMultiplier = 1.0f;
     CelestialBody*  m_parent                 = nullptr;
+
+    // Atmosphere
+    bool            m_hasAtmosphere    = false;
+    float           m_atmosphereRadius = 0.0f;
+    Mesh            m_atmosphereMesh;
 };

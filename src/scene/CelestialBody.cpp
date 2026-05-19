@@ -40,6 +40,12 @@ CelestialBody::CelestialBody(const CelestialParams& params)
                           / m_params.rotationPeriodHours;
     }
 
+    // Atmosphere
+    m_hasAtmosphere = params.hasAtmosphere;
+    if (m_hasAtmosphere) {
+        m_atmosphereRadius = params.radius * params.atmosphereScale;
+        m_atmosphereMesh = SphereMesh::generate(m_atmosphereRadius);
+    }
 }
 
 void CelestialBody::update(const Time& time) {
@@ -86,6 +92,19 @@ glm::mat4 CelestialBody::getModelMatrix() const {
     // Innermost: self rotation
     model = glm::rotate(model, m_rotationAngle, glm::vec3(0.0f, 1.0f, 0.0f));
     return model;
+}
+
+void CelestialBody::drawAtmosphere(Shader& shader) {
+    if (!m_hasAtmosphere) return;
+
+    glm::mat4 model = getModelMatrix();
+
+    shader.setMat4("uModel", model);
+    shader.setVec3("uPlanetCenter", getWorldPosition());
+    shader.setFloat("uPlanetRadius", m_params.radius);
+    shader.setFloat("uAtmosphereRadius", m_atmosphereRadius);
+
+    m_atmosphereMesh.draw();
 }
 
 void CelestialBody::draw(Shader& shader) {

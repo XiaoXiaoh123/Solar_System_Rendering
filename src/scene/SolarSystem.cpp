@@ -8,6 +8,7 @@
 SolarSystem::SolarSystem() {
     m_planetShader.load("assets/shaders/planet.vert", "assets/shaders/planet.frag");
     m_sunShader.load("assets/shaders/sun.vert", "assets/shaders/sun.frag");
+    m_atmosphereShader.load("assets/shaders/atmosphere.vert", "assets/shaders/atmosphere.frag");
 
     // --- Sun ---
     {
@@ -35,7 +36,8 @@ SolarSystem::SolarSystem() {
                 "assets/textures/venus_surface.jpg"});
     addPlanet({"Earth",    Constants::EARTH_RADIUS,    Constants::EARTH_ORBIT,
                Constants::EARTH_ORBIT_PERIOD,   Constants::EARTH_ROT_PERIOD,   Constants::EARTH_TILT,
-               "assets/textures/earth_daymap.jpg"});
+               "assets/textures/earth_daymap.jpg",
+               true, 1.08f}); // hasAtmosphere, atmosphereScale
     addPlanet({"Mars",     Constants::MARS_RADIUS,     Constants::MARS_ORBIT,
                Constants::MARS_ORBIT_PERIOD,    Constants::MARS_ROT_PERIOD,    Constants::MARS_TILT,
                 "assets/textures/mars.jpg"});
@@ -47,7 +49,7 @@ SolarSystem::SolarSystem() {
                 "assets/textures/saturn.jpg"});
     addPlanet({"Uranus",   Constants::URANUS_RADIUS,   Constants::URANUS_ORBIT,
                Constants::URANUS_ORBIT_PERIOD,  Constants::URANUS_ROT_PERIOD,  Constants::URANUS_TILT,
-                "assets/textures/mars.jpg""assets/textures/uranus.jpg"});
+                "assets/textures/uranus.jpg"});
     addPlanet({"Neptune",  Constants::NEPTUNE_RADIUS,  Constants::NEPTUNE_ORBIT,
                Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT,
                 "assets/textures/neptune.jpg"});
@@ -114,6 +116,31 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
         planet->draw(m_planetShader);
     }
     m_moon->draw(m_planetShader);
+
+    // --- Atmosphere pass (transparent overlay) ---
+    if (m_showAtmosphere) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE); // don't write depth for transparent atmosphere
+
+        m_atmosphereShader.use();
+        m_atmosphereShader.setMat4("uView", view);
+        m_atmosphereShader.setMat4("uProjection", projection);
+        m_atmosphereShader.setVec3("uViewPos", camera.getPosition());
+        m_atmosphereShader.setVec3("uLightPos", glm::vec3(0.0f));
+        // Earth-like atmosphere parameters
+        m_atmosphereShader.setVec3("uRayleighColor", glm::vec3(0.3f, 0.6f, 1.0f));
+        m_atmosphereShader.setFloat("uRayleighScaleHeight", 0.15f);
+        m_atmosphereShader.setFloat("uMieScaleHeight", 0.05f);
+
+        for (auto& planet : m_planets) {
+            planet->drawAtmosphere(m_atmosphereShader);
+        }
+        m_moon->drawAtmosphere(m_atmosphereShader);
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
 }
 
 void SolarSystem::setTimeScale(float scale) {

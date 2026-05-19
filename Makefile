@@ -10,8 +10,15 @@ BUILD_DIR := build/obj
 OUT_DIR   := build
 TARGET    := $(OUT_DIR)/SolarSystem.exe
 
-# --- Detect shell at parse time ---
-HAS_SH    := $(shell which sh 2>/dev/null || echo "")
+# --- Detect shell at parse time (MSYSTEM only set in Git Bash / MSYS2) ---
+ifdef MSYSTEM
+  HAS_SH := yes
+endif
+
+# Convert forward slashes to backslashes for cmd /q /d /c commands
+WIN_BUILD_DIR = $(subst /,\,$(BUILD_DIR))
+WIN_OUT_DIR   = $(subst /,\,$(OUT_DIR))
+WIN_TARGET    = $(subst /,\,$(TARGET))
 
 # --- GLFW ---
 GLFW_DIR  := thirdparty/glfw_src
@@ -72,20 +79,20 @@ all: dirs $(TARGET)
 dirs:
 ifeq ($(HAS_SH),)
 # ---- Windows cmd ----
-	@if not exist $(BUILD_DIR)\$(SRC_DIR)\core      mkdir $(BUILD_DIR)\$(SRC_DIR)\core
-	@if not exist $(BUILD_DIR)\$(SRC_DIR)\render    mkdir $(BUILD_DIR)\$(SRC_DIR)\render
-	@if not exist $(BUILD_DIR)\$(SRC_DIR)\scene     mkdir $(BUILD_DIR)\$(SRC_DIR)\scene
-	@if not exist $(BUILD_DIR)\$(SRC_DIR)\lighting  mkdir $(BUILD_DIR)\$(SRC_DIR)\lighting
-	@if not exist $(BUILD_DIR)\$(SRC_DIR)\utils     mkdir $(BUILD_DIR)\$(SRC_DIR)\utils
-	@if not exist $(OUT_DIR)                        mkdir $(OUT_DIR)
-	@if not exist $(OUT_DIR)\assets\shaders         mkdir $(OUT_DIR)\assets\shaders
-	@if not exist $(OUT_DIR)\assets\textures        mkdir $(OUT_DIR)\assets\textures
-	@if not exist $(OUT_DIR)\assets\textures\skybox mkdir $(OUT_DIR)\assets\textures\skybox
-	@if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(OUT_DIR)\assets\shaders\ >nul 2>&1
-	@if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(OUT_DIR)\assets\shaders\ >nul 2>&1
-	@if exist assets\textures\*.jpg  copy /y assets\textures\*.jpg  $(OUT_DIR)\assets\textures\ >nul 2>&1
-	@if exist assets\textures\*.png  copy /y assets\textures\*.png  $(OUT_DIR)\assets\textures\ >nul 2>&1
-	@if exist assets\textures\skybox\*.png copy /y assets\textures\skybox\*.png $(OUT_DIR)\assets\textures\skybox\ >nul 2>&1
+	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\core      mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\core
+	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\render    mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\render
+	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\scene     mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\scene
+	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\lighting  mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\lighting
+	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\utils     mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\utils
+	@if not exist $(WIN_OUT_DIR)                        mkdir $(WIN_OUT_DIR)
+	@if not exist $(WIN_OUT_DIR)\assets\shaders         mkdir $(WIN_OUT_DIR)\assets\shaders
+	@if not exist $(WIN_OUT_DIR)\assets\textures        mkdir $(WIN_OUT_DIR)\assets\textures
+	@if not exist $(WIN_OUT_DIR)\assets\textures\skybox mkdir $(WIN_OUT_DIR)\assets\textures\skybox
+	@if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(WIN_OUT_DIR)\assets\shaders\ >nul 2>&1
+	@if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(WIN_OUT_DIR)\assets\shaders\ >nul 2>&1
+	@if exist assets\textures\*.jpg  copy /y assets\textures\*.jpg  $(WIN_OUT_DIR)\assets\textures\ >nul 2>&1
+	@if exist assets\textures\*.png  copy /y assets\textures\*.png  $(WIN_OUT_DIR)\assets\textures\ >nul 2>&1
+	@if exist assets\textures\skybox\*.png copy /y assets\textures\skybox\*.png $(WIN_OUT_DIR)\assets\textures\skybox\ >nul 2>&1
 else
 # ---- Unix (Git Bash / MSYS2) ----
 	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/core
@@ -128,8 +135,8 @@ $(BUILD_DIR)/glfw_%.o: $(GLFW_DIR)/src/%.c | dirs
 # --- Clean ---
 clean:
 ifeq ($(HAS_SH),)
-	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
-	@if exist $(TARGET)   del /q $(TARGET)
+	@if exist $(WIN_BUILD_DIR) rmdir /s /q $(WIN_BUILD_DIR)
+	@if exist $(WIN_TARGET)   del /q $(WIN_TARGET)
 else
 	@rm -rf $(BUILD_DIR) $(TARGET)
 endif

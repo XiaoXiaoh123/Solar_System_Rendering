@@ -26,6 +26,8 @@ public:
     void  setTimeScale(float scale);
     float getTimeScale() const { return m_timeScale; }
     void  setAmbientStrength(float s) { m_ambientStrength = s; }
+    void  setShowAtmosphere(bool show)  { m_showAtmosphere = show; }
+    bool  getShowAtmosphere() const     { return m_showAtmosphere; }
 
 private:
     std::unique_ptr<Star>                m_star;
@@ -37,7 +39,9 @@ private:
 
     Shader m_planetShader;
     Shader m_sunShader;
+    Shader m_atmosphereShader;
 
-    float m_timeScale        = 1.0f;
-    float m_ambientStrength = 0.08f;
+    float m_timeScale         = 1.0f;
+    float m_ambientStrength   = 0.08f;
+    bool  m_showAtmosphere    = false;
 };

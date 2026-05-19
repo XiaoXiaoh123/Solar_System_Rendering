@@ -198,6 +198,11 @@ int main() {
                     ImGui::Separator();
                     ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 2.0f, "%.3f");
 
+                    bool showAtmosphere = solarSystem.getShowAtmosphere();
+                    if (ImGui::Checkbox("Atmospheric Scattering", &showAtmosphere)) {
+                        solarSystem.setShowAtmosphere(showAtmosphere);
+                    }
+
                     ImGui::Spacing();
 
                     // ---- Planets ----
