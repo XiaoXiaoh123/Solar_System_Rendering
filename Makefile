@@ -10,8 +10,8 @@ BUILD_DIR := build/obj
 OUT_DIR   := build
 TARGET    := $(OUT_DIR)/SolarSystem.exe
 
-# Helper: convert forward slashes to backslashes for cmd
-FIXPATH   = $(subst /,\,$(1))
+# --- Detect shell at parse time ---
+HAS_SH    := $(shell which sh 2>/dev/null || echo "")
 
 # --- GLFW ---
 GLFW_DIR  := thirdparty/glfw_src
@@ -70,18 +70,39 @@ all: dirs $(TARGET)
 	@echo Build complete: $(TARGET)
 
 dirs:
-	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\core     mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\core
-	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\render   mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\render
-	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\scene    mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\scene
-	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\lighting mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\lighting
-	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\utils    mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\utils
-	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))                       mkdir $(call FIXPATH,$(OUT_DIR))
-	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))\assets\shaders        mkdir $(call FIXPATH,$(OUT_DIR))\assets\shaders
-	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))\assets\textures       mkdir $(call FIXPATH,$(OUT_DIR))\assets\textures
-	@cmd /q /d /c if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(call FIXPATH,$(OUT_DIR))\assets\shaders\ >nul 2>&1
-	@cmd /q /d /c if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(call FIXPATH,$(OUT_DIR))\assets\shaders\ >nul 2>&1
-	@cmd /q /d /c if exist assets\textures\*.jpg copy /y assets\textures\*.jpg $(call FIXPATH,$(OUT_DIR))\assets\textures\ >nul 2>&1
-	@cmd /q /d /c if exist assets\textures\*.png copy /y assets\textures\*.png $(call FIXPATH,$(OUT_DIR))\assets\textures\ >nul 2>&1
+ifeq ($(HAS_SH),)
+# ---- Windows cmd ----
+	@if not exist $(BUILD_DIR)\$(SRC_DIR)\core      mkdir $(BUILD_DIR)\$(SRC_DIR)\core
+	@if not exist $(BUILD_DIR)\$(SRC_DIR)\render    mkdir $(BUILD_DIR)\$(SRC_DIR)\render
+	@if not exist $(BUILD_DIR)\$(SRC_DIR)\scene     mkdir $(BUILD_DIR)\$(SRC_DIR)\scene
+	@if not exist $(BUILD_DIR)\$(SRC_DIR)\lighting  mkdir $(BUILD_DIR)\$(SRC_DIR)\lighting
+	@if not exist $(BUILD_DIR)\$(SRC_DIR)\utils     mkdir $(BUILD_DIR)\$(SRC_DIR)\utils
+	@if not exist $(OUT_DIR)                        mkdir $(OUT_DIR)
+	@if not exist $(OUT_DIR)\assets\shaders         mkdir $(OUT_DIR)\assets\shaders
+	@if not exist $(OUT_DIR)\assets\textures        mkdir $(OUT_DIR)\assets\textures
+	@if not exist $(OUT_DIR)\assets\textures\skybox mkdir $(OUT_DIR)\assets\textures\skybox
+	@if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(OUT_DIR)\assets\shaders\ >nul 2>&1
+	@if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(OUT_DIR)\assets\shaders\ >nul 2>&1
+	@if exist assets\textures\*.jpg  copy /y assets\textures\*.jpg  $(OUT_DIR)\assets\textures\ >nul 2>&1
+	@if exist assets\textures\*.png  copy /y assets\textures\*.png  $(OUT_DIR)\assets\textures\ >nul 2>&1
+	@if exist assets\textures\skybox\*.png copy /y assets\textures\skybox\*.png $(OUT_DIR)\assets\textures\skybox\ >nul 2>&1
+else
+# ---- Unix (Git Bash / MSYS2) ----
+	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/core
+	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/render
+	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/scene
+	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/lighting
+	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/utils
+	@mkdir -p $(OUT_DIR)
+	@mkdir -p $(OUT_DIR)/assets/shaders
+	@mkdir -p $(OUT_DIR)/assets/textures
+	@mkdir -p $(OUT_DIR)/assets/textures/skybox
+	@cp assets/shaders/*.vert $(OUT_DIR)/assets/shaders/ 2>/dev/null || true
+	@cp assets/shaders/*.frag $(OUT_DIR)/assets/shaders/ 2>/dev/null || true
+	@cp assets/textures/*.jpg  $(OUT_DIR)/assets/textures/ 2>/dev/null || true
+	@cp assets/textures/*.png  $(OUT_DIR)/assets/textures/ 2>/dev/null || true
+	@cp assets/textures/skybox/*.png $(OUT_DIR)/assets/textures/skybox/ 2>/dev/null || true
+endif
 
 # --- Link ---
 $(TARGET): $(OBJS) $(GLAD_OBJ) $(GLFW_OBJS) | dirs
@@ -89,7 +110,11 @@ $(TARGET): $(OBJS) $(GLAD_OBJ) $(GLFW_OBJS) | dirs
 
 # --- Project .cpp to .o ---
 $(BUILD_DIR)/%.o: %.cpp | dirs
-	@cmd /q /d /c if not exist $(call FIXPATH,$(dir $@)) mkdir $(call FIXPATH,$(dir $@))
+ifeq ($(HAS_SH),)
+	@if not exist $(subst /,\,$(dir $@)) mkdir $(subst /,\,$(dir $@))
+else
+	@mkdir -p $(dir $@)
+endif
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # --- GLAD ---
@@ -102,9 +127,17 @@ $(BUILD_DIR)/glfw_%.o: $(GLFW_DIR)/src/%.c | dirs
 
 # --- Clean ---
 clean:
-	@cmd /q /d /c if exist $(call FIXPATH,$(BUILD_DIR)) rmdir /s /q $(call FIXPATH,$(BUILD_DIR))
-	@cmd /q /d /c if exist $(call FIXPATH,$(TARGET))   del /q $(call FIXPATH,$(TARGET))
+ifeq ($(HAS_SH),)
+	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
+	@if exist $(TARGET)   del /q $(TARGET)
+else
+	@rm -rf $(BUILD_DIR) $(TARGET)
+endif
 
 # --- Run ---
 run: all
+ifeq ($(HAS_SH),)
 	$(TARGET)
+else
+	cd $(OUT_DIR) && ./SolarSystem.exe
+endif

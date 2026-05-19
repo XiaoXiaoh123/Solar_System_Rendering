@@ -63,6 +63,12 @@ int main() {
         Time         time;
         Renderer     renderer;
         SolarSystem  solarSystem;
+        Skybox       skybox;
+        try {
+            skybox.load("assets/textures/skybox/starmap_2020_4k.png");
+        } catch (const std::exception& e) {
+            std::cerr << "Skybox: " << e.what() << std::endl;
+        }
 
         // --- Settings state ---
         bool  showSettings     = false;
@@ -302,6 +308,7 @@ int main() {
             float aspectRatio = window.getAspectRatio();
             renderer.clear();
             renderer.setViewport(window.getWidth(), window.getHeight());
+            renderer.drawSkybox(camera, skybox, aspectRatio);
             renderer.drawSolarSystem(solarSystem, camera, aspectRatio);
 
             ImGui::Render();

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <stdexcept>
 
-// Simple cube mesh for skybox (owned internally)
+// Unit cube mesh for skybox (vertex = 3D direction)
 struct SkyboxMesh {
     unsigned int vao = 0, vbo = 0;
     void setup() {
@@ -47,28 +47,40 @@ Skybox::Skybox() {
     m_shader.load("assets/shaders/skybox.vert", "assets/shaders/skybox.frag");
 }
 
-void Skybox::load(const std::vector<std::string>& facePaths) {
-    glGenTextures(1, &m_cubemapTexture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemapTexture);
+void Skybox::load(const std::string& equirectPath) {
+    stbi_set_flip_vertically_on_load(true);
 
-    stbi_set_flip_vertically_on_load(false);
-    for (int i = 0; i < 6; ++i) {
-        int w, h, ch;
-        unsigned char* data = stbi_load(facePaths[i].c_str(), &w, &h, &ch, 0);
-        if (data) {
-            GLenum format = (ch == 4) ? GL_RGBA : GL_RGB;
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, format, w, h, 0, format, GL_UNSIGNED_BYTE, data);
-            stbi_image_free(data);
-        } else {
-            std::cerr << "Skybox texture failed to load: " << facePaths[i] << std::endl;
-        }
+    int width, height, channels;
+    unsigned char* data = stbi_load(equirectPath.c_str(), &width, &height, &channels, 0);
+    if (!data) {
+        throw std::runtime_error("Failed to load skybox texture: " + equirectPath);
     }
 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    GLenum internalFormat, dataFormat;
+    if (channels == 3) {
+        internalFormat = GL_SRGB;
+        dataFormat     = GL_RGB;
+    } else if (channels == 4) {
+        internalFormat = GL_SRGB_ALPHA;
+        dataFormat     = GL_RGBA;
+    } else {
+        stbi_image_free(data);
+        throw std::runtime_error("Unsupported skybox texture format: " + equirectPath);
+    }
+
+    glGenTextures(1, &m_texture);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0,
+                 dataFormat, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
 }
 
 void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
@@ -82,17 +94,20 @@ void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
     glDepthFunc(GL_LEQUAL);
     m_shader.use();
 
-    // Remove translation from view matrix
+    // Strip translation from view matrix so skybox stays centered on camera
     glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(view));
     m_shader.setMat4("uView", viewNoTranslation);
     m_shader.setMat4("uProjection", projection);
 
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemapTexture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    m_shader.setInt("uEquirectangularMap", 0);
+
     mesh.draw();
 
     glDepthFunc(GL_LESS);
 }
 
 Skybox::~Skybox() {
-    if (m_cubemapTexture) glDeleteTextures(1, &m_cubemapTexture);
+    if (m_texture) glDeleteTextures(1, &m_texture);
 }

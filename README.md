@@ -11,7 +11,7 @@
 - 太阳 + 八颗行星 + 月球的三维可视化，**真实公转/自转周期**驱动
 - 行星支持纹理贴图（无纹理时使用程序化着色）
 - Blinn-Phong 光照模型（太阳为点光源），环境光 0 ~ 2.0 可调
-- 轨道线渲染（含月球绕地球轨道），WASD 自由飞行摄像机，窗口自适应
+- 星空天空盒（等距矩形全景图），轨道线渲染（含月球绕地球轨道），WASD 自由飞行摄像机
 - **Dear ImGui 控制面板**：时间倍速、播放/暂停、环境光、**每行星自转速度**、退出程序
 
 ## 快速开始
@@ -104,6 +104,22 @@ addPlanet({"Earth",    Constants::EARTH_RADIUS,    Constants::EARTH_ORBIT,
 | PNG | sRGB (RGB) / Linear (RGBA) | 无损，支持透明度 |
 | BMP / TGA | 取决于通道数 | 不推荐 |
 
+### 天空盒（星空背景）
+
+天空盒使用单张**等距矩形投影（Equirectangular）**全景图，着色器将 3D 方向向量转换为 UV 采样：
+
+```glsl
+u = 0.5 + atan(dir.z, dir.x) / (2π);
+v = 0.5 - asin(dir.y) / π;
+```
+
+- 纹理路径：`assets/textures/skybox/starmap_2020_4k.png`
+- 渲染顺序：天空盒先于天体绘制，使用 `GL_LEQUAL` 深度测试保持在最远平面
+- 相机旋转时星空跟随转动，平移无效（通过去除 view 矩阵的平移分量实现）
+- 推荐来源：[NASA Deep Star Maps](https://svs.gsfc.nasa.gov/4851/) 或 [HDRI Haven](https://hdrihaven.com/)
+
+换用其他全景图：替换 `assets/textures/skybox/` 下的 PNG 文件，修改 `main.cpp` 中 `skybox.load()` 的路径即可。
+
 ## 项目结构
 
 ```
@@ -120,7 +136,9 @@ Solar_System_Rendering/
 │   │   ├── skybox.vert / skybox.frag
 │   │   └── sun.vert / sun.frag
 │   └── textures/
-│       └── earth_daymap.jpg   (行星纹理)
+│       ├── earth_daymap.jpg       (行星纹理)
+│       └── skybox/
+│           └── starmap_2020_4k.png (星空全景图)
 ├── src/
 │   ├── core/
 │   │   ├── Camera.h / .cpp
@@ -178,6 +196,7 @@ Solar_System_Rendering/
 - [x] 月球 + 轨道线 + 父子层级系统
 - [x] 控制面板：每行星自转速度独立调节（0 ~ 10x）
 - [x] 控制面板：环境光滑块范围 0 ~ 2.0
+- [x] 星空天空盒（等距矩形全景图，4K）
 - [ ] 大气散射（Rayleigh / Mie）
 - [ ] 阴影映射
 - [ ] LOD + 程序化星球生成
