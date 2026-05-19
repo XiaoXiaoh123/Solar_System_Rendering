@@ -20,6 +20,7 @@ public:
     CelestialBody* getEarth()   { return m_earth; }
     const Star*    getStar()    const { return m_star.get(); }
     const std::vector<std::unique_ptr<Planet>>& getPlanets() const { return m_planets; }
+    std::vector<std::unique_ptr<Planet>>&       getPlanets()       { return m_planets; }
     Planet*        getMoon()    const { return m_moon.get(); }
 
     void  setTimeScale(float scale);
@@ -31,6 +32,7 @@ private:
     std::vector<std::unique_ptr<Planet>> m_planets;
     std::unique_ptr<Planet>              m_moon;
     std::vector<std::unique_ptr<Orbit>>  m_orbits;
+    std::unique_ptr<Orbit>               m_moonOrbit;
     CelestialBody*                       m_earth = nullptr;
 
     Shader m_planetShader;

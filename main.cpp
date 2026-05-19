@@ -190,18 +190,36 @@ int main() {
                     // ---- Lighting ----
                     ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "Lighting");
                     ImGui::Separator();
-                    ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 0.5f, "%.3f");
+                    ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 2.0f, "%.3f");
 
                     ImGui::Spacing();
 
                     // ---- Planets ----
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Planets");
                     ImGui::Separator();
+
+                    auto planetSlider = [](const char* name, CelestialBody* body) {
+                        float mult = body->getRotationSpeedMultiplier();
+                        float base = body->getBaseRotationSpeed();
+                        ImGui::PushID(name);
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%s", name);
+                        ImGui::SameLine(100);
+                        ImGui::PushItemWidth(150);
+                        if (ImGui::SliderFloat("##rot", &mult, 0.0f, 10.0f, "%.2fx")) {
+                            body->setRotationSpeedMultiplier(mult);
+                        }
+                        ImGui::PopItemWidth();
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("%.2f rad/s", base * mult);
+                        ImGui::PopID();
+                    };
+
                     for (auto& planet : solarSystem.getPlanets()) {
-                        ImGui::BulletText("%s", planet->getName().c_str());
+                        planetSlider(planet->getName().c_str(), planet.get());
                     }
                     if (auto* moon = solarSystem.getMoon()) {
-                        ImGui::BulletText("%s", moon->getName().c_str());
+                        planetSlider(moon->getName().c_str(), moon);
                     }
 
                     ImGui::Spacing();

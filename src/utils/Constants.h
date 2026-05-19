@@ -92,6 +92,6 @@ constexpr int   SPHERE_SECTORS      = 64;
 constexpr int   SPHERE_STACKS       = 32;
 
 // --- Lighting ---
-constexpr float AMBIENT_STRENGTH    = 0.08f;
+constexpr float AMBIENT_STRENGTH    = 0.15f;
 
 } // namespace Constants

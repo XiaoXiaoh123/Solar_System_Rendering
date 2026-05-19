@@ -35,13 +35,18 @@ public:
 
     void setParent(CelestialBody* parent) { m_parent = parent; }
 
+    float getBaseRotationSpeed()           const { return m_rotationSpeed; }
+    float getRotationSpeedMultiplier()     const { return m_rotationSpeedMultiplier; }
+    void  setRotationSpeedMultiplier(float m)    { m_rotationSpeedMultiplier = m; }
+
 protected:
     CelestialParams m_params;
     Mesh            m_mesh;
     Texture         m_texture;
     float           m_orbitAngle     = 0.0f;
     float           m_rotationAngle  = 0.0f;
-    float           m_orbitSpeed     = 0.0f;
-    float           m_rotationSpeed  = 0.0f;
-    CelestialBody*  m_parent         = nullptr;
+    float           m_orbitSpeed             = 0.0f;
+    float           m_rotationSpeed          = 0.0f;
+    float           m_rotationSpeedMultiplier = 1.0f;
+    CelestialBody*  m_parent                 = nullptr;
 };

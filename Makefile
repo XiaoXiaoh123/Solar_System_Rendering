@@ -10,6 +10,9 @@ BUILD_DIR := build/obj
 OUT_DIR   := build
 TARGET    := $(OUT_DIR)/SolarSystem.exe
 
+# Helper: convert forward slashes to backslashes for cmd
+FIXPATH   = $(subst /,\,$(1))
+
 # --- GLFW ---
 GLFW_DIR  := thirdparty/glfw_src
 GLFW_SRCS := context init input monitor platform vulkan window \
@@ -64,39 +67,44 @@ GLFW_CFLAGS := -O2 -Wall -D_GLFW_WIN32 -DUNICODE -D_UNICODE -I$(GLFW_DIR)/includ
 .PHONY: all clean run dirs
 
 all: dirs $(TARGET)
-	@echo "Build complete: $(TARGET)"
+	@echo Build complete: $(TARGET)
 
 dirs:
-	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/core
-	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/render
-	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/scene
-	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/lighting
-	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/utils
-	@mkdir -p $(OUT_DIR)
-	@mkdir -p $(OUT_DIR)/assets/shaders
-	@cp -u assets/shaders/*.vert assets/shaders/*.frag $(OUT_DIR)/assets/shaders/ 2>/dev/null || true
+	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\core     mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\core
+	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\render   mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\render
+	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\scene    mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\scene
+	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\lighting mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\lighting
+	@cmd /q /d /c if not exist $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\utils    mkdir $(call FIXPATH,$(BUILD_DIR))\$(SRC_DIR)\utils
+	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))                       mkdir $(call FIXPATH,$(OUT_DIR))
+	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))\assets\shaders        mkdir $(call FIXPATH,$(OUT_DIR))\assets\shaders
+	@cmd /q /d /c if not exist $(call FIXPATH,$(OUT_DIR))\assets\textures       mkdir $(call FIXPATH,$(OUT_DIR))\assets\textures
+	@cmd /q /d /c if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(call FIXPATH,$(OUT_DIR))\assets\shaders\ >nul 2>&1
+	@cmd /q /d /c if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(call FIXPATH,$(OUT_DIR))\assets\shaders\ >nul 2>&1
+	@cmd /q /d /c if exist assets\textures\*.jpg copy /y assets\textures\*.jpg $(call FIXPATH,$(OUT_DIR))\assets\textures\ >nul 2>&1
+	@cmd /q /d /c if exist assets\textures\*.png copy /y assets\textures\*.png $(call FIXPATH,$(OUT_DIR))\assets\textures\ >nul 2>&1
 
 # --- Link ---
 $(TARGET): $(OBJS) $(GLAD_OBJ) $(GLFW_OBJS) | dirs
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDLIBS)
 
-# --- Project .cpp → .o ---
+# --- Project .cpp to .o ---
 $(BUILD_DIR)/%.o: %.cpp | dirs
-	@mkdir -p $(dir $@)
+	@cmd /q /d /c if not exist $(call FIXPATH,$(dir $@)) mkdir $(call FIXPATH,$(dir $@))
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # --- GLAD ---
 $(GLAD_OBJ): $(GLAD_SRC) | dirs
 	$(CC) -O2 -Ithirdparty/glad/include -c $< -o $@
 
-# --- GLFW .c → .o ---
+# --- GLFW .c to .o ---
 $(BUILD_DIR)/glfw_%.o: $(GLFW_DIR)/src/%.c | dirs
 	$(CC) $(GLFW_CFLAGS) -c $< -o $@
 
 # --- Clean ---
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	@cmd /q /d /c if exist $(call FIXPATH,$(BUILD_DIR)) rmdir /s /q $(call FIXPATH,$(BUILD_DIR))
+	@cmd /q /d /c if exist $(call FIXPATH,$(TARGET))   del /q $(call FIXPATH,$(TARGET))
 
 # --- Run ---
 run: all
-	cd $(OUT_DIR) && ./SolarSystem.exe
+	$(TARGET)

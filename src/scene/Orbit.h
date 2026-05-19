@@ -9,7 +9,8 @@ public:
     Orbit(float radius, const glm::vec3& color = glm::vec3(0.3f, 0.3f, 0.5f));
     ~Orbit() = default;
 
-    void draw(const glm::mat4& view, const glm::mat4& projection);
+    void draw(const glm::mat4& view, const glm::mat4& projection,
+              const glm::vec3& center = glm::vec3(0.0f));
 
 private:
     Mesh     m_mesh;

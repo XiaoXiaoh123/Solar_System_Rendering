@@ -38,7 +38,7 @@ void main() {
     vec3 specular = spec * uLightColor * 0.5;
 
     float distance = length(uLightPos - FragPos);
-    float attenuation = 1.0 / (1.0 + 0.001 * distance + 0.00001 * distance * distance);
+    float attenuation = 1.0 / (1.0 + 0.0005 * distance + 0.000003 * distance * distance);
 
     vec3 result = (ambient + attenuation * (diffuse + specular)) * baseColor;
 

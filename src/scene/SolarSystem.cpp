@@ -15,6 +15,7 @@ SolarSystem::SolarSystem() {
         p.name        = "Sun";
         p.radius      = Constants::SUN_RADIUS;
         p.orbitRadius = 0.0f;
+        p.texturePath = "assets/textures/sun.jpg";
         m_star = std::make_unique<Star>(p);
     }
 
@@ -27,21 +28,29 @@ SolarSystem::SolarSystem() {
     };
 
     addPlanet({"Mercury",  Constants::MERCURY_RADIUS,  Constants::MERCURY_ORBIT,
-               Constants::MERCURY_ORBIT_PERIOD, Constants::MERCURY_ROT_PERIOD, Constants::MERCURY_TILT});
+               Constants::MERCURY_ORBIT_PERIOD, Constants::MERCURY_ROT_PERIOD, Constants::MERCURY_TILT,
+                "assets/textures/mercury.jpg"});
     addPlanet({"Venus",    Constants::VENUS_RADIUS,    Constants::VENUS_ORBIT,
-               Constants::VENUS_ORBIT_PERIOD,   Constants::VENUS_ROT_PERIOD,   Constants::VENUS_TILT});
+               Constants::VENUS_ORBIT_PERIOD,   Constants::VENUS_ROT_PERIOD,   Constants::VENUS_TILT,
+                "assets/textures/venus_surface.jpg"});
     addPlanet({"Earth",    Constants::EARTH_RADIUS,    Constants::EARTH_ORBIT,
-               Constants::EARTH_ORBIT_PERIOD,   Constants::EARTH_ROT_PERIOD,   Constants::EARTH_TILT});
+               Constants::EARTH_ORBIT_PERIOD,   Constants::EARTH_ROT_PERIOD,   Constants::EARTH_TILT,
+               "assets/textures/earth_daymap.jpg"});
     addPlanet({"Mars",     Constants::MARS_RADIUS,     Constants::MARS_ORBIT,
-               Constants::MARS_ORBIT_PERIOD,    Constants::MARS_ROT_PERIOD,    Constants::MARS_TILT});
+               Constants::MARS_ORBIT_PERIOD,    Constants::MARS_ROT_PERIOD,    Constants::MARS_TILT,
+                "assets/textures/mars.jpg"});
     addPlanet({"Jupiter",  Constants::JUPITER_RADIUS,  Constants::JUPITER_ORBIT,
-               Constants::JUPITER_ORBIT_PERIOD, Constants::JUPITER_ROT_PERIOD, Constants::JUPITER_TILT});
+               Constants::JUPITER_ORBIT_PERIOD, Constants::JUPITER_ROT_PERIOD, Constants::JUPITER_TILT,
+                "assets/textures/jupiter.jpg"});
     addPlanet({"Saturn",   Constants::SATURN_RADIUS,   Constants::SATURN_ORBIT,
-               Constants::SATURN_ORBIT_PERIOD,  Constants::SATURN_ROT_PERIOD,  Constants::SATURN_TILT});
+               Constants::SATURN_ORBIT_PERIOD,  Constants::SATURN_ROT_PERIOD,  Constants::SATURN_TILT,
+                "assets/textures/saturn.jpg"});
     addPlanet({"Uranus",   Constants::URANUS_RADIUS,   Constants::URANUS_ORBIT,
-               Constants::URANUS_ORBIT_PERIOD,  Constants::URANUS_ROT_PERIOD,  Constants::URANUS_TILT});
+               Constants::URANUS_ORBIT_PERIOD,  Constants::URANUS_ROT_PERIOD,  Constants::URANUS_TILT,
+                "assets/textures/mars.jpg""assets/textures/uranus.jpg"});
     addPlanet({"Neptune",  Constants::NEPTUNE_RADIUS,  Constants::NEPTUNE_ORBIT,
-               Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT});
+               Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT,
+                "assets/textures/neptune.jpg"});
 
     // Find Earth pointer for Moon parent
     for (auto& p : m_planets) {
@@ -59,8 +68,13 @@ SolarSystem::SolarSystem() {
         m.orbitRadius        = Constants::MOON_ORBIT;
         m.orbitPeriodDays    = Constants::MOON_ORBIT_PERIOD;
         m.rotationPeriodHours = Constants::MOON_ROT_PERIOD;
+        m.texturePath        = "assets/textures/moon.jpg";
         m_moon = std::make_unique<Planet>(m);
         m_moon->setParent(m_earth);
+
+        // Moon orbit (drawn around Earth's position, not origin)
+        m_moonOrbit = std::make_unique<Orbit>(Constants::MOON_ORBIT,
+                                              glm::vec3(0.4f, 0.4f, 0.5f));
     }
 }
 
@@ -79,6 +93,8 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
     for (auto& orbit : m_orbits) {
         orbit->draw(view, projection);
     }
+    // Moon orbit centered on Earth
+    m_moonOrbit->draw(view, projection, m_earth->getWorldPosition());
 
     m_sunShader.use();
     m_sunShader.setMat4("uView", view);

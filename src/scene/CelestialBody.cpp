@@ -45,7 +45,7 @@ CelestialBody::CelestialBody(const CelestialParams& params)
 void CelestialBody::update(const Time& time) {
     float dt = time.getDeltaTime();
     m_orbitAngle    += m_orbitSpeed    * dt;
-    m_rotationAngle += m_rotationSpeed * dt;
+    m_rotationAngle += m_rotationSpeed * m_rotationSpeedMultiplier * dt;
 }
 
 glm::vec3 CelestialBody::getWorldPosition() const {
@@ -93,6 +93,7 @@ void CelestialBody::draw(Shader& shader) {
 
     if (m_texture.isValid()) {
         m_texture.bind(0);
+        shader.setInt("uDiffuseMap", 0);
         shader.setInt("uHasTexture", 1);
     } else {
         shader.setInt("uHasTexture", 0);

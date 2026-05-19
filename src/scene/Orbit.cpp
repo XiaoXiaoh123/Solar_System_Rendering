@@ -1,6 +1,7 @@
 #include "Orbit.h"
 #include <glad/gl.h>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <cmath>
 
@@ -28,11 +29,12 @@ Orbit::Orbit(float radius, const glm::vec3& color)
     m_shader.load("assets/shaders/orbit.vert", "assets/shaders/orbit.frag");
 }
 
-void Orbit::draw(const glm::mat4& view, const glm::mat4& projection) {
+void Orbit::draw(const glm::mat4& view, const glm::mat4& projection,
+                const glm::vec3& center) {
     m_shader.use();
     m_shader.setMat4("uView", view);
     m_shader.setMat4("uProjection", projection);
-    m_shader.setMat4("uModel", glm::mat4(1.0f));
+    m_shader.setMat4("uModel", glm::translate(glm::mat4(1.0f), center));
     m_shader.setVec3("uColor", m_color);
 
     glLineWidth(1.5f);
