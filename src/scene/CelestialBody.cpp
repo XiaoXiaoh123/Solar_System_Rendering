@@ -108,7 +108,12 @@ void CelestialBody::drawAtmosphere(Shader& shader) {
 }
 
 void CelestialBody::draw(Shader& shader) {
-    shader.setMat4("uModel", getModelMatrix());
+    glm::mat4 model = getModelMatrix();
+    shader.setMat4("uModel", model);
+
+    // Compute normal matrix on CPU to avoid GPU-side inverse() precision issues
+    glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
+    shader.setMat3("uNormalMatrix", normalMatrix);
 
     if (m_texture.isValid()) {
         m_texture.bind(0);

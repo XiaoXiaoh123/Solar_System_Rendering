@@ -9,12 +9,13 @@ out vec3 Normal;
 out vec2 TexCoord;
 
 uniform mat4 uModel;
+uniform mat3 uNormalMatrix;  // CPU-computed: mat3(transpose(inverse(uModel)))
 uniform mat4 uView;
 uniform mat4 uProjection;
 
 void main() {
     FragPos  = vec3(uModel * vec4(aPos, 1.0));
-    Normal   = mat3(transpose(inverse(uModel))) * aNormal;
+    Normal   = uNormalMatrix * aNormal;
     TexCoord = aTexCoord;
     gl_Position = uProjection * uView * vec4(FragPos, 1.0);
 }

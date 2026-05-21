@@ -101,15 +101,14 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
     m_sunShader.use();
     m_sunShader.setMat4("uView", view);
     m_sunShader.setMat4("uProjection", projection);
-    m_sunShader.setVec3("uViewPos", camera.getPosition());
     m_star->draw(m_sunShader);
 
     m_planetShader.use();
     m_planetShader.setMat4("uView", view);
     m_planetShader.setMat4("uProjection", projection);
-    m_planetShader.setVec3("uViewPos", camera.getPosition());
     m_planetShader.setVec3("uLightPos", glm::vec3(0.0f));
     m_planetShader.setVec3("uLightColor", glm::vec3(1.0f, 0.95f, 0.8f));
+    m_planetShader.setInt("uDebugMode", 0);  // 0=lit, 1=unlit diagnostic
     m_planetShader.setFloat("uAmbientStrength", m_ambientStrength);
 
     for (auto& planet : m_planets) {

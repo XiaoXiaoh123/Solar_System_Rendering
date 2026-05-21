@@ -32,12 +32,12 @@ Mesh SphereMesh::generate(float radius, int sectors, int stacks) {
             unsigned int second = first + sectors + 1;
 
             indices.push_back(first);
-            indices.push_back(second);
             indices.push_back(first + 1);
+            indices.push_back(second);
 
             indices.push_back(second);
-            indices.push_back(second + 1);
             indices.push_back(first + 1);
+            indices.push_back(second + 1);
         }
     }
 

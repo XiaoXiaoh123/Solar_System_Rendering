@@ -9,16 +9,15 @@ out vec4 FragColor;
 uniform sampler2D uDiffuseMap;
 uniform int      uHasTexture;
 uniform vec3 uLightColor = vec3(1.0, 0.95, 0.8);
-uniform vec3 uViewPos;
 
 void main() {
     vec3 baseColor;
     if (uHasTexture == 1) {
         baseColor = texture(uDiffuseMap, TexCoord).rgb;
     } else {
-        // Generate a warm yellow-orange gradient using noise-like patterns
-        float fresnel = 1.0 - abs(dot(normalize(Normal), normalize(uViewPos - FragPos)));
-        fresnel = pow(fresnel, 5.0);
+        // View-independent color variation based on surface normal
+        float fresnel = 1.0 - abs(normalize(Normal).y);
+        fresnel = pow(fresnel, 3.0);
         baseColor = mix(vec3(1.0, 0.88, 0.3), vec3(1.0, 0.97, 0.8), fresnel);
     }
 
