@@ -1,3 +1,0 @@
-C:\cmake\bin\cmake.exe -E rm -f CMakeFiles\SolarSystem.dir/objects.a
-C:\mingw32\bin\ar.exe qc CMakeFiles\SolarSystem.dir/objects.a @CMakeFiles\SolarSystem.dir\objects1.rsp
-C:\mingw32\bin\g++.exe -O3 -DNDEBUG -Wl,--whole-archive CMakeFiles\SolarSystem.dir/objects.a -Wl,--no-whole-archive -o SolarSystem.exe -Wl,--out-implib,libSolarSystem.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\SolarSystem.dir\linkLibs.rsp
