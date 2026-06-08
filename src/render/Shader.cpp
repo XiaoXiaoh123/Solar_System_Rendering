@@ -1,10 +1,12 @@
 #include "Shader.h"
+#include "../utils/Paths.h"
 
 #include <glad/gl.h>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
+#include <cstring>
 
 Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath) {
     load(vertexPath, fragmentPath);
@@ -16,23 +18,32 @@ Shader::~Shader() {
     }
 }
 
-Shader::Shader(Shader&& other) noexcept : m_programId(other.m_programId) {
+Shader::Shader(Shader&& other) noexcept
+    : m_programId(other.m_programId),
+      m_uniformLocationCache(other.m_uniformLocationCache),
+      m_uniformLocationCount(other.m_uniformLocationCount) {
     other.m_programId = 0;
+    other.m_uniformLocationCount = 0;
 }
 
 Shader& Shader::operator=(Shader&& other) noexcept {
     if (this != &other) {
         if (m_programId) glDeleteProgram(m_programId);
         m_programId = other.m_programId;
+        m_uniformLocationCache = other.m_uniformLocationCache;
+        m_uniformLocationCount = other.m_uniformLocationCount;
         other.m_programId = 0;
+        other.m_uniformLocationCount = 0;
     }
     return *this;
 }
 
 static std::string readFile(const std::string& path) {
-    std::ifstream file(path);
+    std::string resolvedPath = Paths::resolve(path);
+    std::ifstream file(resolvedPath);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open shader file: " + path);
+        throw std::runtime_error("Failed to open shader file: " + path +
+                                 " (resolved: " + resolvedPath + ")");
     }
     std::stringstream buf;
     buf << file.rdbuf();
@@ -40,6 +51,12 @@ static std::string readFile(const std::string& path) {
 }
 
 void Shader::load(const std::string& vertexPath, const std::string& fragmentPath) {
+    if (m_programId) {
+        glDeleteProgram(m_programId);
+        m_programId = 0;
+        m_uniformLocationCount = 0;
+    }
+
     std::string vertSource, fragSource;
     try {
         vertSource = readFile(vertexPath);
@@ -94,27 +111,52 @@ void Shader::unuse() const {
     glUseProgram(0);
 }
 
+int Shader::getUniformLocation(const std::string& name) const {
+    for (std::size_t i = 0; i < m_uniformLocationCount; ++i) {
+        if (std::strcmp(m_uniformLocationCache[i].name, name.c_str()) == 0) {
+            return m_uniformLocationCache[i].location;
+        }
+    }
+
+    int location = glGetUniformLocation(m_programId, name.c_str());
+    if (m_uniformLocationCount < m_uniformLocationCache.size()) {
+        UniformLocationEntry& entry = m_uniformLocationCache[m_uniformLocationCount++];
+        std::strncpy(entry.name, name.c_str(), sizeof(entry.name) - 1);
+        entry.name[sizeof(entry.name) - 1] = '\0';
+        entry.location = location;
+    }
+    return location;
+}
+
 void Shader::setBool(const std::string& name, bool value) const {
-    glUniform1i(glGetUniformLocation(m_programId, name.c_str()), static_cast<int>(value));
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform1i(location, static_cast<int>(value));
 }
 void Shader::setInt(const std::string& name, int value) const {
-    glUniform1i(glGetUniformLocation(m_programId, name.c_str()), value);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform1i(location, value);
 }
 void Shader::setFloat(const std::string& name, float value) const {
-    glUniform1f(glGetUniformLocation(m_programId, name.c_str()), value);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform1f(location, value);
 }
 void Shader::setVec2(const std::string& name, const glm::vec2& value) const {
-    glUniform2fv(glGetUniformLocation(m_programId, name.c_str()), 1, &value[0]);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform2fv(location, 1, &value[0]);
 }
 void Shader::setVec3(const std::string& name, const glm::vec3& value) const {
-    glUniform3fv(glGetUniformLocation(m_programId, name.c_str()), 1, &value[0]);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform3fv(location, 1, &value[0]);
 }
 void Shader::setVec4(const std::string& name, const glm::vec4& value) const {
-    glUniform4fv(glGetUniformLocation(m_programId, name.c_str()), 1, &value[0]);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniform4fv(location, 1, &value[0]);
 }
 void Shader::setMat3(const std::string& name, const glm::mat3& value) const {
-    glUniformMatrix3fv(glGetUniformLocation(m_programId, name.c_str()), 1, GL_FALSE, &value[0][0]);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniformMatrix3fv(location, 1, GL_FALSE, &value[0][0]);
 }
 void Shader::setMat4(const std::string& name, const glm::mat4& value) const {
-    glUniformMatrix4fv(glGetUniformLocation(m_programId, name.c_str()), 1, GL_FALSE, &value[0][0]);
+    int location = getUniformLocation(name);
+    if (location >= 0) glUniformMatrix4fv(location, 1, GL_FALSE, &value[0][0]);
 }

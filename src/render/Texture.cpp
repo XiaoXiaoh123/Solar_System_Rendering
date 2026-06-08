@@ -1,4 +1,5 @@
 #include "Texture.h"
+#include "../utils/Paths.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -32,9 +33,11 @@ Texture& Texture::operator=(Texture&& other) noexcept {
 void Texture::load(const std::string& path, bool sRGB) {
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 0);
+    std::string resolvedPath = Paths::resolve(path);
+    unsigned char* data = stbi_load(resolvedPath.c_str(), &width, &height, &channels, 0);
     if (!data) {
-        throw std::runtime_error("Failed to load texture: " + path);
+        throw std::runtime_error("Failed to load texture: " + path +
+                                 " (resolved: " + resolvedPath + ")");
     }
 
     GLenum internalFormat, dataFormat;
@@ -49,7 +52,8 @@ void Texture::load(const std::string& path, bool sRGB) {
         dataFormat     = GL_RGBA;
     } else {
         stbi_image_free(data);
-        throw std::runtime_error("Unsupported texture format: " + path);
+        throw std::runtime_error("Unsupported texture format: " + path +
+                                 " (resolved: " + resolvedPath + ")");
     }
 
     glGenTextures(1, &m_textureId);

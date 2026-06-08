@@ -2,7 +2,7 @@
 
 CXX       := g++
 CC        := gcc
-CXXFLAGS  := -std=c++17 -O2 -Wall
+CXXFLAGS  := -std=c++17 -O1 -Wall
 LDLIBS    := -lopengl32 -lgdi32 -mwindows
 
 SRC_DIR   := src
@@ -55,7 +55,9 @@ SRCS := main.cpp \
         $(SRC_DIR)/scene/Planet.cpp \
         $(SRC_DIR)/scene/Star.cpp \
         $(SRC_DIR)/scene/Orbit.cpp \
+        $(SRC_DIR)/scene/SolarSystemConfig.cpp \
         $(SRC_DIR)/scene/SolarSystem.cpp \
+        $(SRC_DIR)/utils/Paths.cpp \
         $(IMGUI_SRCS)
 
 OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS))
@@ -85,9 +87,11 @@ ifeq ($(HAS_SH),)
 	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\lighting  mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\lighting
 	@if not exist $(WIN_BUILD_DIR)\$(SRC_DIR)\utils     mkdir $(WIN_BUILD_DIR)\$(SRC_DIR)\utils
 	@if not exist $(WIN_OUT_DIR)                        mkdir $(WIN_OUT_DIR)
+	@if not exist $(WIN_OUT_DIR)\assets\config          mkdir $(WIN_OUT_DIR)\assets\config
 	@if not exist $(WIN_OUT_DIR)\assets\shaders         mkdir $(WIN_OUT_DIR)\assets\shaders
 	@if not exist $(WIN_OUT_DIR)\assets\textures        mkdir $(WIN_OUT_DIR)\assets\textures
 	@if not exist $(WIN_OUT_DIR)\assets\textures\skybox mkdir $(WIN_OUT_DIR)\assets\textures\skybox
+	@if exist assets\config\*.ini copy /y assets\config\*.ini $(WIN_OUT_DIR)\assets\config\ >nul 2>&1
 	@if exist assets\shaders\*.vert copy /y assets\shaders\*.vert $(WIN_OUT_DIR)\assets\shaders\ >nul 2>&1
 	@if exist assets\shaders\*.frag copy /y assets\shaders\*.frag $(WIN_OUT_DIR)\assets\shaders\ >nul 2>&1
 	@if exist assets\textures\*.jpg  copy /y assets\textures\*.jpg  $(WIN_OUT_DIR)\assets\textures\ >nul 2>&1
@@ -101,9 +105,11 @@ else
 	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/lighting
 	@mkdir -p $(BUILD_DIR)/$(SRC_DIR)/utils
 	@mkdir -p $(OUT_DIR)
+	@mkdir -p $(OUT_DIR)/assets/config
 	@mkdir -p $(OUT_DIR)/assets/shaders
 	@mkdir -p $(OUT_DIR)/assets/textures
 	@mkdir -p $(OUT_DIR)/assets/textures/skybox
+	@cp assets/config/*.ini $(OUT_DIR)/assets/config/ 2>/dev/null || true
 	@cp assets/shaders/*.vert $(OUT_DIR)/assets/shaders/ 2>/dev/null || true
 	@cp assets/shaders/*.frag $(OUT_DIR)/assets/shaders/ 2>/dev/null || true
 	@cp assets/textures/*.jpg  $(OUT_DIR)/assets/textures/ 2>/dev/null || true

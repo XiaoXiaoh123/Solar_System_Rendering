@@ -1,15 +1,15 @@
 #include "Skybox.h"
+#include "../utils/Paths.h"
 
 #include <glad/gl.h>
 #include <stb_image.h>
 #include <iostream>
 #include <stdexcept>
 
-// Unit cube mesh for skybox (vertex = 3D direction)
-struct SkyboxMesh {
-    unsigned int vao = 0, vbo = 0;
-    void setup() {
-        float skyboxVertices[] = {
+void Skybox::setupMesh() {
+    if (m_meshReady) return;
+
+    float skyboxVertices[] = {
             -1.0f,  1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,   1.0f, -1.0f, -1.0f,
              1.0f, -1.0f, -1.0f,   1.0f,  1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,
             -1.0f, -1.0f,  1.0f,  -1.0f, -1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,
@@ -22,26 +22,19 @@ struct SkyboxMesh {
              1.0f,  1.0f,  1.0f,  -1.0f,  1.0f,  1.0f,  -1.0f,  1.0f, -1.0f,
             -1.0f, -1.0f, -1.0f,  -1.0f, -1.0f,  1.0f,   1.0f, -1.0f,  1.0f,
              1.0f, -1.0f,  1.0f,   1.0f, -1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,
-        };
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-        glBindVertexArray(0);
-    }
-    void draw() const {
-        glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
-    }
-    ~SkyboxMesh() {
-        if (vbo) glDeleteBuffers(1, &vbo);
-        if (vao) glDeleteVertexArrays(1, &vao);
-    }
-};
+    };
+
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
+
+    m_meshReady = true;
+}
 
 Skybox::Skybox() {
     m_shader.load("assets/shaders/skybox.vert", "assets/shaders/skybox.frag");
@@ -51,9 +44,11 @@ void Skybox::load(const std::string& equirectPath) {
     stbi_set_flip_vertically_on_load(true);
 
     int width, height, channels;
-    unsigned char* data = stbi_load(equirectPath.c_str(), &width, &height, &channels, 0);
+    std::string resolvedPath = Paths::resolve(equirectPath);
+    unsigned char* data = stbi_load(resolvedPath.c_str(), &width, &height, &channels, 0);
     if (!data) {
-        throw std::runtime_error("Failed to load skybox texture: " + equirectPath);
+        throw std::runtime_error("Failed to load skybox texture: " + equirectPath +
+                                 " (resolved: " + resolvedPath + ")");
     }
 
     GLenum internalFormat, dataFormat;
@@ -65,7 +60,8 @@ void Skybox::load(const std::string& equirectPath) {
         dataFormat     = GL_RGBA;
     } else {
         stbi_image_free(data);
-        throw std::runtime_error("Unsupported skybox texture format: " + equirectPath);
+        throw std::runtime_error("Unsupported skybox texture format: " + equirectPath +
+                                 " (resolved: " + resolvedPath + ")");
     }
 
     glGenTextures(1, &m_texture);
@@ -84,12 +80,7 @@ void Skybox::load(const std::string& equirectPath) {
 }
 
 void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
-    static SkyboxMesh mesh;
-    static bool initialized = false;
-    if (!initialized) {
-        mesh.setup();
-        initialized = true;
-    }
+    setupMesh();
 
     glDepthFunc(GL_LEQUAL);
     m_shader.use();
@@ -103,11 +94,15 @@ void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
     glBindTexture(GL_TEXTURE_2D, m_texture);
     m_shader.setInt("uEquirectangularMap", 0);
 
-    mesh.draw();
+    glBindVertexArray(m_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
 
     glDepthFunc(GL_LESS);
 }
 
 Skybox::~Skybox() {
     if (m_texture) glDeleteTextures(1, &m_texture);
+    if (m_vbo) glDeleteBuffers(1, &m_vbo);
+    if (m_vao) glDeleteVertexArrays(1, &m_vao);
 }

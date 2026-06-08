@@ -9,6 +9,14 @@
 class Camera;
 class Shader;
 
+struct AtmosphereTuning {
+    float intensity           = 1.0f;
+    float edgeStrength        = 1.0f;
+    float sunsetStrength      = 1.0f;
+    float backscatterStrength = 1.0f;
+    float terminatorWidth     = 0.28f;
+};
+
 class SolarSystem {
 public:
     SolarSystem();
@@ -28,6 +36,8 @@ public:
     void  setAmbientStrength(float s) { m_ambientStrength = s; }
     void  setShowAtmosphere(bool show)  { m_showAtmosphere = show; }
     bool  getShowAtmosphere() const     { return m_showAtmosphere; }
+    AtmosphereTuning&       getAtmosphereTuning()       { return m_atmosphereTuning; }
+    const AtmosphereTuning& getAtmosphereTuning() const { return m_atmosphereTuning; }
 
 private:
     std::unique_ptr<Star>                m_star;
@@ -43,5 +53,6 @@ private:
 
     float m_timeScale         = 1.0f;
     float m_ambientStrength   = 0.08f;
-    bool  m_showAtmosphere    = false;
+    bool  m_showAtmosphere    = true;
+    AtmosphereTuning m_atmosphereTuning;
 };

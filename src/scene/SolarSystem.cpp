@@ -1,91 +1,160 @@
 #include "SolarSystem.h"
+#include "SolarSystemConfig.h"
 #include "../core/Camera.h"
 #include "../core/Time.h"
 #include "../utils/Constants.h"
 #include "../render/Shader.h"
 #include <glad/gl.h>
 
+#include <stdexcept>
+
+namespace {
+
+struct AtmosphereProfile {
+    glm::vec3 rayleighColor;
+    glm::vec3 mieColor;
+    float densityFalloff;
+    float scatteringStrength;
+    float alphaStrength;
+    float terminatorWidth;
+    float edgeStrength;
+    float sunsetStrength;
+    float backscatterStrength;
+};
+
+AtmosphereProfile profileForBody(const CelestialBody& body) {
+    const std::string& name = body.getName();
+
+    if (name == "Venus") {
+        return {
+            glm::vec3(1.0f, 0.78f, 0.42f),
+            glm::vec3(1.0f, 0.50f, 0.18f),
+            1.35f,
+            1.55f,
+            0.42f,
+            0.34f,
+            1.45f,
+            1.10f,
+            0.75f
+        };
+    }
+
+    if (name == "Mars") {
+        return {
+            glm::vec3(0.96f, 0.40f, 0.18f),
+            glm::vec3(1.0f, 0.36f, 0.12f),
+            0.45f,
+            0.48f,
+            0.18f,
+            0.18f,
+            0.58f,
+            0.55f,
+            0.25f
+        };
+    }
+
+    return {
+        glm::vec3(0.28f, 0.55f, 1.0f),
+        glm::vec3(1.0f, 0.46f, 0.18f),
+        0.95f,
+        1.35f,
+        0.34f,
+        0.24f,
+        1.15f,
+        0.85f,
+        1.15f
+    };
+}
+
+} // namespace
+
 SolarSystem::SolarSystem() {
     m_planetShader.load("assets/shaders/planet.vert", "assets/shaders/planet.frag");
     m_sunShader.load("assets/shaders/sun.vert", "assets/shaders/sun.frag");
     m_atmosphereShader.load("assets/shaders/atmosphere.vert", "assets/shaders/atmosphere.frag");
 
-    // --- Sun ---
-    {
-        CelestialParams p;
-        p.name        = "Sun";
-        p.radius      = Constants::SUN_RADIUS;
-        p.orbitRadius = 0.0f;
-        p.texturePath = "assets/textures/sun.jpg";
-        m_star = std::make_unique<Star>(p);
-    }
+    std::vector<std::pair<std::string, CelestialBody*>> bodiesByName;
+    std::string moonParentName = "Earth";
+    glm::vec3 moonOrbitColor(0.4f, 0.4f, 0.5f);
+    bool drawMoonOrbit = false;
 
-    // --- Planets (real orbital & rotation data) ---
-    auto addPlanet = [&](const CelestialParams& p) {
-        auto planet = std::make_unique<Planet>(p);
-        auto orbit  = std::make_unique<Orbit>(p.orbitRadius);
-        m_planets.push_back(std::move(planet));
-        m_orbits.push_back(std::move(orbit));
-    };
+    std::vector<BodyConfig> configs =
+        SolarSystemConfig::load("assets/config/solar_system.ini");
 
-    addPlanet({"Mercury",  Constants::MERCURY_RADIUS,  Constants::MERCURY_ORBIT,
-               Constants::MERCURY_ORBIT_PERIOD, Constants::MERCURY_ROT_PERIOD, Constants::MERCURY_TILT,
-                "assets/textures/mercury.jpg"});
-    addPlanet({"Venus",    Constants::VENUS_RADIUS,    Constants::VENUS_ORBIT,
-               Constants::VENUS_ORBIT_PERIOD,   Constants::VENUS_ROT_PERIOD,   Constants::VENUS_TILT,
-                "assets/textures/venus_surface.jpg"});
-    addPlanet({"Earth",    Constants::EARTH_RADIUS,    Constants::EARTH_ORBIT,
-               Constants::EARTH_ORBIT_PERIOD,   Constants::EARTH_ROT_PERIOD,   Constants::EARTH_TILT,
-               "assets/textures/earth_daymap.jpg",
-               true, 1.08f}); // hasAtmosphere, atmosphereScale
-    addPlanet({"Mars",     Constants::MARS_RADIUS,     Constants::MARS_ORBIT,
-               Constants::MARS_ORBIT_PERIOD,    Constants::MARS_ROT_PERIOD,    Constants::MARS_TILT,
-                "assets/textures/mars.jpg"});
-    addPlanet({"Jupiter",  Constants::JUPITER_RADIUS,  Constants::JUPITER_ORBIT,
-               Constants::JUPITER_ORBIT_PERIOD, Constants::JUPITER_ROT_PERIOD, Constants::JUPITER_TILT,
-                "assets/textures/jupiter.jpg"});
-    addPlanet({"Saturn",   Constants::SATURN_RADIUS,   Constants::SATURN_ORBIT,
-               Constants::SATURN_ORBIT_PERIOD,  Constants::SATURN_ROT_PERIOD,  Constants::SATURN_TILT,
-                "assets/textures/saturn.jpg"});
-    addPlanet({"Uranus",   Constants::URANUS_RADIUS,   Constants::URANUS_ORBIT,
-               Constants::URANUS_ORBIT_PERIOD,  Constants::URANUS_ROT_PERIOD,  Constants::URANUS_TILT,
-                "assets/textures/uranus.jpg"});
-    addPlanet({"Neptune",  Constants::NEPTUNE_RADIUS,  Constants::NEPTUNE_ORBIT,
-               Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT,
-                "assets/textures/neptune.jpg"});
+    for (const BodyConfig& config : configs) {
+        switch (config.type) {
+        case BodyConfig::Type::Star:
+            if (m_star) {
+                throw std::runtime_error("Solar system config contains more than one star");
+            }
+            m_star = std::make_unique<Star>(config.params);
+            bodiesByName.emplace_back(config.params.name, m_star.get());
+            break;
 
-    // Find Earth pointer for Moon parent
-    for (auto& p : m_planets) {
-        if (p->getName() == "Earth") {
-            m_earth = p.get();
+        case BodyConfig::Type::Planet: {
+            auto planet = std::make_unique<Planet>(config.params);
+            CelestialBody* planetPtr = planet.get();
+
+            if (config.params.name == "Earth") {
+                m_earth = planetPtr;
+            }
+            if (config.drawOrbit && config.params.orbitRadius > 0.0f) {
+                m_orbits.push_back(std::make_unique<Orbit>(config.params.orbitRadius,
+                                                           config.orbitColor));
+            }
+
+            bodiesByName.emplace_back(config.params.name, planetPtr);
+            m_planets.push_back(std::move(planet));
+            break;
+        }
+
+        case BodyConfig::Type::Moon:
+            if (m_moon) {
+                throw std::runtime_error("Solar system config contains more than one moon");
+            }
+            m_moon = std::make_unique<Planet>(config.params);
+            bodiesByName.emplace_back(config.params.name, m_moon.get());
+            moonParentName = config.parentName.empty() ? "Earth" : config.parentName;
+            moonOrbitColor = config.orbitColor;
+            drawMoonOrbit = config.drawOrbit && config.params.orbitRadius > 0.0f;
             break;
         }
     }
 
-    // --- Moon ---
-    {
-        CelestialParams m;
-        m.name               = "Moon";
-        m.radius             = Constants::MOON_RADIUS;
-        m.orbitRadius        = Constants::MOON_ORBIT;
-        m.orbitPeriodDays    = Constants::MOON_ORBIT_PERIOD;
-        m.rotationPeriodHours = Constants::MOON_ROT_PERIOD;
-        m.texturePath        = "assets/textures/moon.jpg";
-        m_moon = std::make_unique<Planet>(m);
-        m_moon->setParent(m_earth);
+    if (!m_star) {
+        throw std::runtime_error("Solar system config must contain one star");
+    }
 
-        // Moon orbit (drawn around Earth's position, not origin)
-        m_moonOrbit = std::make_unique<Orbit>(Constants::MOON_ORBIT,
-                                              glm::vec3(0.4f, 0.4f, 0.5f));
+    if (m_moon) {
+        CelestialBody* parent = nullptr;
+        for (const auto& body : bodiesByName) {
+            if (body.first == moonParentName) {
+                parent = body.second;
+                break;
+            }
+        }
+        if (!parent) {
+            throw std::runtime_error("Moon parent not found in solar system config: " +
+                                     moonParentName);
+        }
+        m_moon->setParent(parent);
+
+        if (drawMoonOrbit) {
+            m_moonOrbit = std::make_unique<Orbit>(m_moon->getOrbitRadius(), moonOrbitColor);
+        }
     }
 }
 
 void SolarSystem::update(const Time& time) {
-    m_star->update(time);
+    if (m_star) {
+        m_star->update(time);
+    }
     for (auto& planet : m_planets) {
         planet->update(time);
     }
-    m_moon->update(time);
+    if (m_moon) {
+        m_moon->update(time);
+    }
 }
 
 void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
@@ -96,12 +165,16 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
         orbit->draw(view, projection);
     }
     // Moon orbit centered on Earth
-    m_moonOrbit->draw(view, projection, m_earth->getWorldPosition());
+    if (m_moonOrbit && m_moon) {
+        m_moonOrbit->draw(view, projection, m_moon->getParentWorldPosition());
+    }
 
     m_sunShader.use();
     m_sunShader.setMat4("uView", view);
     m_sunShader.setMat4("uProjection", projection);
-    m_star->draw(m_sunShader);
+    if (m_star) {
+        m_star->draw(m_sunShader);
+    }
 
     m_planetShader.use();
     m_planetShader.setMat4("uView", view);
@@ -114,12 +187,18 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
     for (auto& planet : m_planets) {
         planet->draw(m_planetShader);
     }
-    m_moon->draw(m_planetShader);
+    if (m_moon) {
+        m_moon->draw(m_planetShader);
+    }
 
     // --- Atmosphere pass (transparent overlay) ---
     if (m_showAtmosphere) {
+        GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+
         glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
         glDepthMask(GL_FALSE); // don't write depth for transparent atmosphere
 
         m_atmosphereShader.use();
@@ -127,17 +206,41 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
         m_atmosphereShader.setMat4("uProjection", projection);
         m_atmosphereShader.setVec3("uViewPos", camera.getPosition());
         m_atmosphereShader.setVec3("uLightPos", glm::vec3(0.0f));
-        // Earth-like atmosphere parameters
-        m_atmosphereShader.setVec3("uRayleighColor", glm::vec3(0.3f, 0.6f, 1.0f));
-        m_atmosphereShader.setFloat("uRayleighScaleHeight", 0.15f);
-        m_atmosphereShader.setFloat("uMieScaleHeight", 0.05f);
+        auto drawAtmosphere = [&](CelestialBody* body) {
+            if (!body || !body->hasAtmosphere()) return;
+
+            AtmosphereProfile profile = profileForBody(*body);
+            m_atmosphereShader.setVec3("uRayleighColor", profile.rayleighColor);
+            m_atmosphereShader.setVec3("uMieColor", profile.mieColor);
+            m_atmosphereShader.setFloat("uDensityFalloff", profile.densityFalloff);
+            m_atmosphereShader.setFloat("uScatteringStrength",
+                                        profile.scatteringStrength * m_atmosphereTuning.intensity);
+            m_atmosphereShader.setFloat("uAlphaStrength",
+                                        profile.alphaStrength * m_atmosphereTuning.intensity);
+            m_atmosphereShader.setFloat("uTerminatorWidth",
+                                        m_atmosphereTuning.terminatorWidth);
+            m_atmosphereShader.setFloat("uEdgeStrength",
+                                        profile.edgeStrength * m_atmosphereTuning.edgeStrength);
+            m_atmosphereShader.setFloat("uSunsetStrength",
+                                        profile.sunsetStrength * m_atmosphereTuning.sunsetStrength);
+            m_atmosphereShader.setFloat("uBackscatterStrength",
+                                        profile.backscatterStrength * m_atmosphereTuning.backscatterStrength);
+
+            body->drawAtmosphere(m_atmosphereShader);
+        };
 
         for (auto& planet : m_planets) {
-            planet->drawAtmosphere(m_atmosphereShader);
+            drawAtmosphere(planet.get());
         }
-        m_moon->drawAtmosphere(m_atmosphereShader);
+        drawAtmosphere(m_moon.get());
 
         glDepthMask(GL_TRUE);
+        if (cullWasEnabled) {
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_BACK);
+        } else {
+            glDisable(GL_CULL_FACE);
+        }
         glDisable(GL_BLEND);
     }
 }

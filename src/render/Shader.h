@@ -1,7 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <string>
-#include <unordered_map>
 #include <glm/glm.hpp>
 
 class Shader {
@@ -32,6 +33,15 @@ public:
     void setMat4(const std::string& name, const glm::mat4& value) const;
 
 private:
+    struct UniformLocationEntry {
+        char name[64] = {};
+        int location = -1;
+    };
+
     unsigned int compileShader(unsigned int type, const std::string& source);
+    int getUniformLocation(const std::string& name) const;
+
     unsigned int m_programId = 0;
+    mutable std::array<UniformLocationEntry, 64> m_uniformLocationCache{};
+    mutable std::size_t m_uniformLocationCount = 0;
 };

@@ -32,9 +32,11 @@ public:
     const std::string& getName()        const { return m_params.name; }
     float              getOrbitAngle()  const { return m_orbitAngle; }
     float              getOrbitRadius() const { return m_params.orbitRadius; }
+    glm::vec3          getParentWorldPosition() const;
     glm::vec3          getWorldPosition() const;
     glm::mat4          getModelMatrix()   const;
     const CelestialParams& getParams()    const { return m_params; }
+    bool               hasAtmosphere()    const { return m_hasAtmosphere; }
 
     void setParent(CelestialBody* parent) { m_parent = parent; }
 

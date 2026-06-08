@@ -54,6 +54,10 @@ void CelestialBody::update(const Time& time) {
     m_rotationAngle += m_rotationSpeed * m_rotationSpeedMultiplier * dt;
 }
 
+glm::vec3 CelestialBody::getParentWorldPosition() const {
+    return m_parent ? m_parent->getWorldPosition() : glm::vec3(0.0f);
+}
+
 glm::vec3 CelestialBody::getWorldPosition() const {
     // Must match model matrix convention: R_y(angle) maps (R,0,0) → (R·cos, 0, -R·sin)
     glm::vec3 localPos(0.0f);

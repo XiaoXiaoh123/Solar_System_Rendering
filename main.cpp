@@ -6,6 +6,7 @@
 #include "src/render/Skybox.h"
 #include "src/scene/SolarSystem.h"
 #include "src/utils/Constants.h"
+#include "src/utils/Paths.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -25,8 +27,16 @@
 #include <windows.h>
 #endif
 
+static void writeLog(const std::string& msg, const char* filename = "SolarSystem.log") {
+    try {
+        std::ofstream log(Paths::writableLogPath(filename), std::ios::app);
+        log << msg << '\n';
+    } catch (...) {}
+}
+
 static void showError(const std::string& msg) {
     std::cerr << "Fatal error: " << msg << std::endl;
+    writeLog("Fatal error: " + msg, "SolarSystem_error.log");
 #ifdef _WIN32
     MessageBoxA(nullptr, msg.c_str(), "Solar System - Fatal Error",
                 MB_OK | MB_ICONERROR);
@@ -35,6 +45,9 @@ static void showError(const std::string& msg) {
 
 int main() {
     std::srand(static_cast<unsigned>(std::time(nullptr)));
+    writeLog("---- SolarSystem startup ----");
+    writeLog("cwd: " + Paths::currentWorkingDirectory());
+    writeLog("exe dir: " + Paths::executableDirectory());
 
     try {
         Window window(Constants::DEFAULT_WIDTH, Constants::DEFAULT_HEIGHT,
@@ -46,6 +59,15 @@ int main() {
 
         std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
         std::cout << "GPU:    " << glGetString(GL_RENDERER) << std::endl;
+        writeLog(std::string("OpenGL: ") +
+                 reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+        writeLog(std::string("GPU: ") +
+                 reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+
+        glClearColor(0.02f, 0.02f, 0.05f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        window.swapBuffers();
+        window.pollEvents();
 
         Input input(window.getHandle());
 
@@ -79,6 +101,7 @@ int main() {
         bool  wantsQuit        = false;
 
         float ambientStrength  = Constants::AMBIENT_STRENGTH;
+        Renderer::PostProcessSettings postProcessSettings;
 
         time.setTimeScale(timeScale);
 
@@ -202,6 +225,27 @@ int main() {
                     if (ImGui::Checkbox("Atmospheric Scattering", &showAtmosphere)) {
                         solarSystem.setShowAtmosphere(showAtmosphere);
                     }
+                    AtmosphereTuning& atmosphere = solarSystem.getAtmosphereTuning();
+                    ImGui::PushItemWidth(180);
+                    ImGui::SliderFloat("Atmo Intensity", &atmosphere.intensity, 0.0f, 2.0f, "%.2f");
+                    ImGui::SliderFloat("Edge Glow", &atmosphere.edgeStrength, 0.0f, 2.5f, "%.2f");
+                    ImGui::SliderFloat("Sunset Band", &atmosphere.sunsetStrength, 0.0f, 2.5f, "%.2f");
+                    ImGui::SliderFloat("Backscatter", &atmosphere.backscatterStrength, 0.0f, 2.5f, "%.2f");
+                    ImGui::SliderFloat("Terminator", &atmosphere.terminatorWidth, 0.05f, 0.65f, "%.2f");
+                    ImGui::PopItemWidth();
+
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "Post FX");
+                    ImGui::Separator();
+                    ImGui::Checkbox("Sun Bloom / HDR", &postProcessSettings.bloomEnabled);
+                    ImGui::PushItemWidth(180);
+                    ImGui::SliderFloat("Exposure", &postProcessSettings.exposure, 0.35f, 2.25f, "%.2f");
+                    ImGui::SliderFloat("Bloom Threshold", &postProcessSettings.bloomThreshold,
+                                       0.55f, 3.0f, "%.2f");
+                    ImGui::SliderFloat("Bloom Strength", &postProcessSettings.bloomStrength,
+                                       0.0f, 2.0f, "%.2f");
+                    ImGui::SliderInt("Bloom Radius", &postProcessSettings.blurPasses, 0, 12);
+                    ImGui::PopItemWidth();
 
                     ImGui::Spacing();
 
@@ -310,11 +354,15 @@ int main() {
             solarSystem.update(time);
             solarSystem.setAmbientStrength(ambientStrength);
 
+            int framebufferWidth = window.getWidth();
+            int framebufferHeight = window.getHeight();
             float aspectRatio = window.getAspectRatio();
+            renderer.beginScene(framebufferWidth, framebufferHeight);
             renderer.clear();
-            renderer.setViewport(window.getWidth(), window.getHeight());
+            renderer.setViewport(framebufferWidth, framebufferHeight);
             renderer.drawSkybox(camera, skybox, aspectRatio);
             renderer.drawSolarSystem(solarSystem, camera, aspectRatio);
+            renderer.endScene(postProcessSettings);
 
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -324,9 +372,13 @@ int main() {
             window.updateFramebufferSize();  // sync dims after resize / fullscreen
         }
 
+        writeLog(std::string("main loop exited: shouldClose=") +
+                 (window.shouldClose() ? "true" : "false") +
+                 " wantsQuit=" + (wantsQuit ? "true" : "false"));
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
+        writeLog("imgui shutdown complete");
 
     } catch (const std::exception& e) {
         showError(e.what());

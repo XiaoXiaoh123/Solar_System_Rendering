@@ -22,7 +22,7 @@ void main() {
     }
 
     // Sun is self-illuminating — no external light needed
-    vec3 result = baseColor * uLightColor * 1.5;
+    vec3 result = baseColor * uLightColor * 3.2;
 
     FragColor = vec4(result, 1.0);
 }

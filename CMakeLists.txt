@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SolarSystem VERSION 1.0.0 LANGUAGES CXX)
+project(SolarSystem VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,7 +30,21 @@ set(SCENE_SOURCES
     src/scene/Planet.cpp
     src/scene/Star.cpp
     src/scene/Orbit.cpp
+    src/scene/SolarSystemConfig.cpp
     src/scene/SolarSystem.cpp
+)
+
+set(UTILS_SOURCES
+    src/utils/Paths.cpp
+)
+
+set(IMGUI_SOURCES
+    thirdparty/imgui/imgui.cpp
+    thirdparty/imgui/imgui_draw.cpp
+    thirdparty/imgui/imgui_tables.cpp
+    thirdparty/imgui/imgui_widgets.cpp
+    thirdparty/imgui/imgui_impl_glfw.cpp
+    thirdparty/imgui/imgui_impl_opengl3.cpp
 )
 
 set(ALL_SOURCES
@@ -38,6 +52,8 @@ set(ALL_SOURCES
     ${CORE_SOURCES}
     ${RENDER_SOURCES}
     ${SCENE_SOURCES}
+    ${UTILS_SOURCES}
+    ${IMGUI_SOURCES}
 )
 
 # --- Third-party: GLAD (OpenGL loader) ---
@@ -63,8 +79,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/thirdparty/glm
     ${CMAKE_SOURCE_DIR}/thirdparty/stb
     ${CMAKE_SOURCE_DIR}/thirdparty/imgui
+    ${CMAKE_SOURCE_DIR}/thirdparty/glfw_src/include
     ${CMAKE_SOURCE_DIR}/thirdparty/glad/include
 )
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(${PROJECT_NAME} PRIVATE -O1)
+endif()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
