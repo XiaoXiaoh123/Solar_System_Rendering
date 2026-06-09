@@ -1,9 +1,10 @@
 #include "Star.h"
 #include "../render/Shader.h"
 
-Star::Star(const CelestialParams& params) : CelestialBody(params) {}
+Star::Star(ResourceManager& resources, const CelestialParams& params)
+    : CelestialBody(resources, params) {}
 
-void Star::draw(Shader& shader) {
+void Star::draw(Shader& shader, const glm::vec3& cameraPosition) {
     shader.setVec3("uLightColor", glm::vec3(1.0f, 0.95f, 0.8f));
-    CelestialBody::draw(shader);
+    CelestialBody::draw(shader, cameraPosition);
 }

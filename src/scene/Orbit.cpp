@@ -24,20 +24,25 @@ glm::vec3 rotateOrbitPlane(const glm::vec3& pos, const OrbitalElements& elements
 
 } // namespace
 
-Orbit::Orbit(float radius, const glm::vec3& color)
-    : m_color(color)
+Orbit::Orbit(ResourceManager& resources, float radius, const glm::vec3& color)
+    : m_shader(&resources.getShader("assets/shaders/orbit.vert",
+                                    "assets/shaders/orbit.frag")),
+      m_color(color)
 {
     OrbitalElements elements;
     elements.semiMajorAxis = radius;
     updatePath(elements, radius);
-    m_shader.load("assets/shaders/orbit.vert", "assets/shaders/orbit.frag");
 }
 
-Orbit::Orbit(const OrbitalElements& elements, float semiMajorAxis, const glm::vec3& color)
-    : m_color(color)
+Orbit::Orbit(ResourceManager& resources,
+             const OrbitalElements& elements,
+             float semiMajorAxis,
+             const glm::vec3& color)
+    : m_shader(&resources.getShader("assets/shaders/orbit.vert",
+                                    "assets/shaders/orbit.frag")),
+      m_color(color)
 {
     updatePath(elements, semiMajorAxis);
-    m_shader.load("assets/shaders/orbit.vert", "assets/shaders/orbit.frag");
 }
 
 void Orbit::updatePath(const OrbitalElements& elements, float semiMajorAxis) {
@@ -73,11 +78,11 @@ void Orbit::updatePath(const OrbitalElements& elements, float semiMajorAxis) {
 
 void Orbit::draw(const glm::mat4& view, const glm::mat4& projection,
                  const glm::vec3& center) {
-    m_shader.use();
-    m_shader.setMat4("uView", view);
-    m_shader.setMat4("uProjection", projection);
-    m_shader.setMat4("uModel", glm::translate(glm::mat4(1.0f), center));
-    m_shader.setVec3("uColor", m_color);
+    m_shader->use();
+    m_shader->setMat4("uView", view);
+    m_shader->setMat4("uProjection", projection);
+    m_shader->setMat4("uModel", glm::translate(glm::mat4(1.0f), center));
+    m_shader->setVec3("uColor", m_color);
 
     glLineWidth(1.5f);
     m_mesh.bind();

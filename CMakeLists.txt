@@ -21,6 +21,7 @@ set(RENDER_SOURCES
     src/render/Mesh.cpp
     src/render/Texture.cpp
     src/render/SphereMesh.cpp
+    src/render/ResourceManager.cpp
     src/render/Skybox.cpp
     src/render/Renderer.cpp
 )
@@ -30,6 +31,7 @@ set(SCENE_SOURCES
     src/scene/Planet.cpp
     src/scene/Star.cpp
     src/scene/Orbit.cpp
+    src/scene/SceneCatalog.cpp
     src/scene/SolarSystemConfig.cpp
     src/scene/SolarSystem.cpp
 )

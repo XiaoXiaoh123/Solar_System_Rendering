@@ -2,11 +2,11 @@
 
 #include <string>
 #include <glm/glm.hpp>
-#include "../render/Mesh.h"
-#include "../render/Texture.h"
+#include "../render/ResourceManager.h"
 
 class Shader;
 class Time;
+class Texture;
 
 struct OrbitalElements {
     float semiMajorAxis          = 0.0f;
@@ -34,16 +34,17 @@ struct CelestialParams {
 
 class CelestialBody {
 public:
-    CelestialBody(const CelestialParams& params);
+    CelestialBody(ResourceManager& resources, const CelestialParams& params);
     virtual ~CelestialBody() = default;
 
     virtual void update(const Time& time);
-    virtual void draw(Shader& shader);
-    virtual void drawAtmosphere(Shader& shader);
+    virtual void draw(Shader& shader, const glm::vec3& cameraPosition);
+    virtual void drawAtmosphere(Shader& shader, const glm::vec3& cameraPosition);
 
     const std::string& getName()        const { return m_params.name; }
     float              getOrbitAngle()  const { return m_orbitAngle; }
     float              getOrbitRadius() const { return m_renderSemiMajorAxis; }
+    float              getRenderRadius() const { return m_renderRadius; }
     glm::vec3          getParentWorldPosition() const;
     glm::vec3          getWorldPosition() const;
     glm::mat4          getModelMatrix()   const;
@@ -58,9 +59,9 @@ public:
     void  setRotationSpeedMultiplier(float m)    { m_rotationSpeedMultiplier = m; }
 
 protected:
+    ResourceManager& m_resources;
     CelestialParams m_params;
-    Mesh            m_mesh;
-    Texture         m_texture;
+    const Texture*  m_texture = nullptr;
     float           m_renderRadius         = 1.0f;
     float           m_renderSemiMajorAxis  = 0.0f;
     float           m_renderAtmosphereRadius = 0.0f;
@@ -74,5 +75,6 @@ protected:
     // Atmosphere
     bool            m_hasAtmosphere    = false;
     float           m_atmosphereRadius = 0.0f;
-    Mesh            m_atmosphereMesh;
+
+    ResourceManager::SphereLod selectLod(const glm::vec3& cameraPosition) const;
 };

@@ -1,18 +1,19 @@
 #include "Renderer.h"
 #include "../core/Camera.h"
+#include "ResourceManager.h"
 #include "../scene/SolarSystem.h"
 
 #include <glad/gl.h>
 #include <algorithm>
 #include <stdexcept>
 
-Renderer::Renderer() {
-    m_extractShader.load("assets/shaders/bloom_extract.vert",
-                         "assets/shaders/bloom_extract.frag");
-    m_blurShader.load("assets/shaders/bloom_blur.vert",
-                      "assets/shaders/bloom_blur.frag");
-    m_compositeShader.load("assets/shaders/hdr_composite.vert",
-                           "assets/shaders/hdr_composite.frag");
+Renderer::Renderer(ResourceManager& resources) {
+    m_extractShader = &resources.getShader("assets/shaders/bloom_extract.vert",
+                                           "assets/shaders/bloom_extract.frag");
+    m_blurShader = &resources.getShader("assets/shaders/bloom_blur.vert",
+                                        "assets/shaders/bloom_blur.frag");
+    m_compositeShader = &resources.getShader("assets/shaders/hdr_composite.vert",
+                                             "assets/shaders/hdr_composite.frag");
     setupFullscreenQuad();
     setupOpenGLState();
 }
@@ -159,9 +160,9 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_pingpongFbo[0]);
     glViewport(0, 0, m_bloomWidth, m_bloomHeight);
     glClear(GL_COLOR_BUFFER_BIT);
-    m_extractShader.use();
-    m_extractShader.setInt("uScene", 0);
-    m_extractShader.setFloat("uThreshold", settings.bloomThreshold);
+    m_extractShader->use();
+    m_extractShader->setInt("uScene", 0);
+    m_extractShader->setFloat("uThreshold", settings.bloomThreshold);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_hdrColorTexture);
     drawFullscreenQuad();
@@ -169,13 +170,13 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     bool horizontal = true;
     bool firstPass = true;
     int blurPasses = std::max(0, settings.blurPasses);
-    m_blurShader.use();
-    m_blurShader.setInt("uImage", 0);
+    m_blurShader->use();
+    m_blurShader->setInt("uImage", 0);
     for (int i = 0; i < blurPasses; ++i) {
         int target = horizontal ? 1 : 0;
         glBindFramebuffer(GL_FRAMEBUFFER, m_pingpongFbo[target]);
         glViewport(0, 0, m_bloomWidth, m_bloomHeight);
-        m_blurShader.setInt("uHorizontal", horizontal ? 1 : 0);
+        m_blurShader->setInt("uHorizontal", horizontal ? 1 : 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, firstPass ? m_pingpongTexture[0]
                                                : m_pingpongTexture[horizontal ? 0 : 1]);
@@ -189,12 +190,12 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, m_targetWidth, m_targetHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    m_compositeShader.use();
-    m_compositeShader.setInt("uScene", 0);
-    m_compositeShader.setInt("uBloom", 1);
-    m_compositeShader.setInt("uBloomEnabled", settings.bloomEnabled ? 1 : 0);
-    m_compositeShader.setFloat("uExposure", settings.exposure);
-    m_compositeShader.setFloat("uBloomStrength", settings.bloomStrength);
+    m_compositeShader->use();
+    m_compositeShader->setInt("uScene", 0);
+    m_compositeShader->setInt("uBloom", 1);
+    m_compositeShader->setInt("uBloomEnabled", settings.bloomEnabled ? 1 : 0);
+    m_compositeShader->setFloat("uExposure", settings.exposure);
+    m_compositeShader->setFloat("uBloomStrength", settings.bloomStrength);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_hdrColorTexture);
     glActiveTexture(GL_TEXTURE1);

@@ -1,6 +1,7 @@
 #include "CelestialBody.h"
 #include "../render/Shader.h"
-#include "../render/SphereMesh.h"
+#include "../render/Mesh.h"
+#include "../render/Texture.h"
 #include "../core/Time.h"
 #include "../utils/Constants.h"
 
@@ -56,17 +57,17 @@ glm::vec3 orbitalPosition(float meanAnomaly,
 
 } // namespace
 
-CelestialBody::CelestialBody(const CelestialParams& params)
-    : m_params(params)
+CelestialBody::CelestialBody(ResourceManager& resources, const CelestialParams& params)
+    : m_resources(resources),
+      m_params(params)
 {
-    m_mesh = SphereMesh::generate(1.0f);
     m_renderRadius = params.radius;
     m_renderSemiMajorAxis = params.orbitRadius;
     m_renderAtmosphereRadius = params.radius * params.atmosphereScale;
 
     if (!params.texturePath.empty()) {
         try {
-            m_texture.load(params.texturePath, true);
+            m_texture = &m_resources.getTexture(params.texturePath, true);
         } catch (...) {}
     }
 
@@ -85,7 +86,6 @@ CelestialBody::CelestialBody(const CelestialParams& params)
     m_hasAtmosphere = params.hasAtmosphere;
     if (m_hasAtmosphere) {
         m_atmosphereRadius = params.radius * params.atmosphereScale;
-        m_atmosphereMesh = SphereMesh::generate(1.0f);
     }
 }
 
@@ -134,7 +134,20 @@ glm::mat4 CelestialBody::getModelMatrix() const {
     return model;
 }
 
-void CelestialBody::drawAtmosphere(Shader& shader) {
+ResourceManager::SphereLod CelestialBody::selectLod(const glm::vec3& cameraPosition) const {
+    const float distance = std::max(glm::length(cameraPosition - getWorldPosition()), 0.001f);
+    const float apparentRadius = m_renderRadius / distance;
+
+    if (apparentRadius > 0.018f || distance < m_renderRadius * 75.0f) {
+        return ResourceManager::SphereLod::High;
+    }
+    if (apparentRadius > 0.006f || distance < m_renderRadius * 220.0f) {
+        return ResourceManager::SphereLod::Medium;
+    }
+    return ResourceManager::SphereLod::Low;
+}
+
+void CelestialBody::drawAtmosphere(Shader& shader, const glm::vec3& cameraPosition) {
     if (!m_hasAtmosphere) return;
 
     glm::mat4 model = getModelMatrix();
@@ -147,23 +160,23 @@ void CelestialBody::drawAtmosphere(Shader& shader) {
     shader.setFloat("uPlanetRadius", m_renderRadius);
     shader.setFloat("uAtmosphereRadius", m_renderAtmosphereRadius);
 
-    m_atmosphereMesh.draw();
+    m_resources.getSphereMesh(selectLod(cameraPosition)).draw();
 }
 
-void CelestialBody::draw(Shader& shader) {
+void CelestialBody::draw(Shader& shader, const glm::vec3& cameraPosition) {
     glm::mat4 model = getModelMatrix();
     shader.setMat4("uModel", model);
 
     glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
     shader.setMat3("uNormalMatrix", normalMatrix);
 
-    if (m_texture.isValid()) {
-        m_texture.bind(0);
+    if (m_texture && m_texture->isValid()) {
+        m_texture->bind(0);
         shader.setInt("uDiffuseMap", 0);
         shader.setInt("uHasTexture", 1);
     } else {
         shader.setInt("uHasTexture", 0);
     }
 
-    m_mesh.draw();
+    m_resources.getSphereMesh(selectLod(cameraPosition)).draw();
 }

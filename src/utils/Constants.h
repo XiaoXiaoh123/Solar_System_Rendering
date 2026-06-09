@@ -88,8 +88,14 @@ constexpr float NEPTUNE_TILT  = 28.32f;
 
 // --- Mesh ---
 constexpr int   ORBIT_SEGMENTS      = 256;
-constexpr int   SPHERE_SECTORS      = 64;
-constexpr int   SPHERE_STACKS       = 32;
+constexpr int   SPHERE_LOD_LOW_SECTORS    = 24;
+constexpr int   SPHERE_LOD_LOW_STACKS     = 12;
+constexpr int   SPHERE_LOD_MEDIUM_SECTORS = 40;
+constexpr int   SPHERE_LOD_MEDIUM_STACKS  = 20;
+constexpr int   SPHERE_LOD_HIGH_SECTORS   = 64;
+constexpr int   SPHERE_LOD_HIGH_STACKS    = 32;
+constexpr int   SPHERE_SECTORS      = SPHERE_LOD_HIGH_SECTORS;
+constexpr int   SPHERE_STACKS       = SPHERE_LOD_HIGH_STACKS;
 
 // --- Lighting ---
 constexpr float AMBIENT_STRENGTH    = 0.15f;

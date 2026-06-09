@@ -23,6 +23,7 @@ public:
     void moveForward(float amount);
     void moveRight(float amount);
     void moveUp(float amount);
+    void lookAt(const glm::vec3& target);
     void rotate(float yawDelta, float pitchDelta);
     void zoom(float amount);
 

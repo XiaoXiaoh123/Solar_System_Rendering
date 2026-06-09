@@ -2,6 +2,7 @@
 #include "SolarSystemConfig.h"
 #include "../core/Camera.h"
 #include "../core/Time.h"
+#include "../render/ResourceManager.h"
 #include "../utils/Constants.h"
 #include "../render/Shader.h"
 #include <glad/gl.h>
@@ -73,10 +74,15 @@ AtmosphereProfile profileForBody(const CelestialBody& body) {
 
 } // namespace
 
-SolarSystem::SolarSystem() {
-    m_planetShader.load("assets/shaders/planet.vert", "assets/shaders/planet.frag");
-    m_sunShader.load("assets/shaders/sun.vert", "assets/shaders/sun.frag");
-    m_atmosphereShader.load("assets/shaders/atmosphere.vert", "assets/shaders/atmosphere.frag");
+SolarSystem::SolarSystem(ResourceManager& resources)
+    : m_resources(resources)
+{
+    m_planetShader = &m_resources.getShader("assets/shaders/planet.vert",
+                                            "assets/shaders/planet.frag");
+    m_sunShader = &m_resources.getShader("assets/shaders/sun.vert",
+                                         "assets/shaders/sun.frag");
+    m_atmosphereShader = &m_resources.getShader("assets/shaders/atmosphere.vert",
+                                                "assets/shaders/atmosphere.frag");
 
     std::vector<std::pair<std::string, CelestialBody*>> bodiesByName;
     std::string moonParentName = "Earth";
@@ -92,19 +98,20 @@ SolarSystem::SolarSystem() {
             if (m_star) {
                 throw std::runtime_error("Solar system config contains more than one star");
             }
-            m_star = std::make_unique<Star>(config.params);
+            m_star = std::make_unique<Star>(m_resources, config.params);
             bodiesByName.emplace_back(config.params.name, m_star.get());
             break;
 
         case BodyConfig::Type::Planet: {
-            auto planet = std::make_unique<Planet>(config.params);
+            auto planet = std::make_unique<Planet>(m_resources, config.params);
             CelestialBody* planetPtr = planet.get();
 
             if (config.params.name == "Earth") {
                 m_earth = planetPtr;
             }
             if (config.drawOrbit && config.params.orbitRadius > 0.0f) {
-                m_orbits.push_back(std::make_unique<Orbit>(config.params.orbit,
+                m_orbits.push_back(std::make_unique<Orbit>(m_resources,
+                                                           config.params.orbit,
                                                            config.params.orbitRadius,
                                                            config.orbitColor));
                 m_orbitBodies.push_back(planetPtr);
@@ -119,7 +126,7 @@ SolarSystem::SolarSystem() {
             if (m_moon) {
                 throw std::runtime_error("Solar system config contains more than one moon");
             }
-            m_moon = std::make_unique<Planet>(config.params);
+            m_moon = std::make_unique<Planet>(m_resources, config.params);
             bodiesByName.emplace_back(config.params.name, m_moon.get());
             moonParentName = config.parentName.empty() ? "Earth" : config.parentName;
             moonOrbitColor = config.orbitColor;
@@ -147,7 +154,8 @@ SolarSystem::SolarSystem() {
         m_moon->setParent(parent);
 
         if (drawMoonOrbit) {
-            m_moonOrbit = std::make_unique<Orbit>(m_moon->getParams().orbit,
+            m_moonOrbit = std::make_unique<Orbit>(m_resources,
+                                                  m_moon->getParams().orbit,
                                                   m_moon->getOrbitRadius(),
                                                   moonOrbitColor);
         }
@@ -168,6 +176,20 @@ void SolarSystem::update(const Time& time) {
     }
 }
 
+std::vector<CelestialBody*> SolarSystem::getBodies() const {
+    std::vector<CelestialBody*> bodies;
+    if (m_star) {
+        bodies.push_back(m_star.get());
+    }
+    for (const auto& planet : m_planets) {
+        bodies.push_back(planet.get());
+    }
+    if (m_moon) {
+        bodies.push_back(m_moon.get());
+    }
+    return bodies;
+}
+
 void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
     glm::mat4 view       = camera.getViewMatrix();
     glm::mat4 projection = camera.getProjectionMatrix(aspectRatio);
@@ -180,26 +202,27 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
         m_moonOrbit->draw(view, projection, m_moon->getParentWorldPosition());
     }
 
-    m_sunShader.use();
-    m_sunShader.setMat4("uView", view);
-    m_sunShader.setMat4("uProjection", projection);
+    m_sunShader->use();
+    m_sunShader->setMat4("uView", view);
+    m_sunShader->setMat4("uProjection", projection);
+    m_sunShader->setInt("uDebugMode", m_debugMode);
     if (m_star) {
-        m_star->draw(m_sunShader);
+        m_star->draw(*m_sunShader, camera.getPosition());
     }
 
-    m_planetShader.use();
-    m_planetShader.setMat4("uView", view);
-    m_planetShader.setMat4("uProjection", projection);
-    m_planetShader.setVec3("uLightPos", glm::vec3(0.0f));
-    m_planetShader.setVec3("uLightColor", glm::vec3(1.0f, 0.95f, 0.8f));
-    m_planetShader.setInt("uDebugMode", 0);  // 0=lit, 1=unlit diagnostic
-    m_planetShader.setFloat("uAmbientStrength", m_ambientStrength);
+    m_planetShader->use();
+    m_planetShader->setMat4("uView", view);
+    m_planetShader->setMat4("uProjection", projection);
+    m_planetShader->setVec3("uLightPos", glm::vec3(0.0f));
+    m_planetShader->setVec3("uLightColor", glm::vec3(1.0f, 0.95f, 0.8f));
+    m_planetShader->setInt("uDebugMode", m_debugMode);
+    m_planetShader->setFloat("uAmbientStrength", m_ambientStrength);
 
     for (auto& planet : m_planets) {
-        planet->draw(m_planetShader);
+        planet->draw(*m_planetShader, camera.getPosition());
     }
     if (m_moon) {
-        m_moon->draw(m_planetShader);
+        m_moon->draw(*m_planetShader, camera.getPosition());
     }
 
     // --- Atmosphere pass (transparent overlay) ---
@@ -212,32 +235,32 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
         glCullFace(GL_FRONT);
         glDepthMask(GL_FALSE); // don't write depth for transparent atmosphere
 
-        m_atmosphereShader.use();
-        m_atmosphereShader.setMat4("uView", view);
-        m_atmosphereShader.setMat4("uProjection", projection);
-        m_atmosphereShader.setVec3("uViewPos", camera.getPosition());
-        m_atmosphereShader.setVec3("uLightPos", glm::vec3(0.0f));
+        m_atmosphereShader->use();
+        m_atmosphereShader->setMat4("uView", view);
+        m_atmosphereShader->setMat4("uProjection", projection);
+        m_atmosphereShader->setVec3("uViewPos", camera.getPosition());
+        m_atmosphereShader->setVec3("uLightPos", glm::vec3(0.0f));
         auto drawAtmosphere = [&](CelestialBody* body) {
             if (!body || !body->hasAtmosphere()) return;
 
             AtmosphereProfile profile = profileForBody(*body);
-            m_atmosphereShader.setVec3("uRayleighColor", profile.rayleighColor);
-            m_atmosphereShader.setVec3("uMieColor", profile.mieColor);
-            m_atmosphereShader.setFloat("uDensityFalloff", profile.densityFalloff);
-            m_atmosphereShader.setFloat("uScatteringStrength",
+            m_atmosphereShader->setVec3("uRayleighColor", profile.rayleighColor);
+            m_atmosphereShader->setVec3("uMieColor", profile.mieColor);
+            m_atmosphereShader->setFloat("uDensityFalloff", profile.densityFalloff);
+            m_atmosphereShader->setFloat("uScatteringStrength",
                                         profile.scatteringStrength * m_atmosphereTuning.intensity);
-            m_atmosphereShader.setFloat("uAlphaStrength",
+            m_atmosphereShader->setFloat("uAlphaStrength",
                                         profile.alphaStrength * m_atmosphereTuning.intensity);
-            m_atmosphereShader.setFloat("uTerminatorWidth",
+            m_atmosphereShader->setFloat("uTerminatorWidth",
                                         m_atmosphereTuning.terminatorWidth);
-            m_atmosphereShader.setFloat("uEdgeStrength",
+            m_atmosphereShader->setFloat("uEdgeStrength",
                                         profile.edgeStrength * m_atmosphereTuning.edgeStrength);
-            m_atmosphereShader.setFloat("uSunsetStrength",
+            m_atmosphereShader->setFloat("uSunsetStrength",
                                         profile.sunsetStrength * m_atmosphereTuning.sunsetStrength);
-            m_atmosphereShader.setFloat("uBackscatterStrength",
+            m_atmosphereShader->setFloat("uBackscatterStrength",
                                         profile.backscatterStrength * m_atmosphereTuning.backscatterStrength);
 
-            body->drawAtmosphere(m_atmosphereShader);
+            body->drawAtmosphere(*m_atmosphereShader, camera.getPosition());
         };
 
         for (auto& planet : m_planets) {
@@ -258,6 +281,10 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
 
 void SolarSystem::setTimeScale(float scale) {
     m_timeScale = scale;
+}
+
+void SolarSystem::setDebugMode(int mode) {
+    m_debugMode = std::clamp(mode, 0, 3);
 }
 
 void SolarSystem::setScaleMode(ScaleMode mode) {

@@ -38,6 +38,13 @@ void Camera::moveUp(float amount) {
     m_position += m_worldUp * amount;
 }
 
+void Camera::lookAt(const glm::vec3& target) {
+    glm::vec3 direction = glm::normalize(target - m_position);
+    m_pitch = glm::degrees(std::asin(glm::clamp(direction.y, -1.0f, 1.0f)));
+    m_yaw = glm::degrees(std::atan2(direction.z, direction.x));
+    updateVectors();
+}
+
 void Camera::rotate(float yawDelta, float pitchDelta) {
     m_yaw   += yawDelta;
     m_pitch += pitchDelta;

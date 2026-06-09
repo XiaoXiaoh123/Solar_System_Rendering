@@ -2,14 +2,17 @@
 #include "src/core/Camera.h"
 #include "src/core/Input.h"
 #include "src/core/Time.h"
+#include "src/render/ResourceManager.h"
 #include "src/render/Renderer.h"
 #include "src/render/Skybox.h"
+#include "src/scene/SceneCatalog.h"
 #include "src/scene/SolarSystem.h"
 #include "src/utils/Constants.h"
 #include "src/utils/Paths.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "thirdparty/imgui/imgui.h"
 #include "thirdparty/imgui/imgui_impl_glfw.h"
@@ -22,8 +25,11 @@
 #include <iomanip>
 #include <iostream>
 #include <cstdlib>
+#include <limits>
 #include <sstream>
+#include <string>
 #include <ctime>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -85,6 +91,231 @@ static std::string formatDate(const SimDate& date) {
     return out.str();
 }
 
+static std::string fixedNumber(float value, int precision) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(precision) << value;
+    return out.str();
+}
+
+static std::string formatAu(float au) {
+    if (au <= 0.0f) return "0 AU";
+    if (au < 0.01f) return fixedNumber(au, 5) + " AU";
+    if (au < 1.0f) return fixedNumber(au, 3) + " AU";
+    return fixedNumber(au, 2) + " AU";
+}
+
+static float solveEccentricAnomalyForInfo(float meanAnomaly, float eccentricity) {
+    float e = std::clamp(eccentricity, 0.0f, 0.95f);
+    float E = meanAnomaly;
+    for (int i = 0; i < 6; ++i) {
+        float f = E - e * std::sin(E) - meanAnomaly;
+        float fp = 1.0f - e * std::cos(E);
+        E -= f / fp;
+    }
+    return E;
+}
+
+static float currentDistanceAu(const CelestialBody* body) {
+    if (!body) return 0.0f;
+    const CelestialParams& p = body->getParams();
+    if (p.semiMajorAxisAU <= 0.0f) return 0.0f;
+    float E = solveEccentricAnomalyForInfo(body->getOrbitAngle(), p.orbit.eccentricity);
+    return p.semiMajorAxisAU * (1.0f - p.orbit.eccentricity * std::cos(E));
+}
+
+static float followDistanceFor(const CelestialBody* body) {
+    if (!body) return 40.0f;
+    float radius = std::max(body->getRenderRadius(), 0.25f);
+    return std::clamp(radius * 7.0f, 8.0f, 260.0f);
+}
+
+static glm::vec3 defaultFollowOffset(const CelestialBody* body) {
+    glm::vec3 direction = glm::normalize(glm::vec3(0.0f, 0.32f, 1.0f));
+    return direction * followDistanceFor(body);
+}
+
+static glm::vec3 rotateFollowOffset(const glm::vec3& offset,
+                                    const glm::vec2& mouseDelta) {
+    if (glm::length(offset) < 0.001f) return offset;
+
+    const glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
+    float yaw = -mouseDelta.x * Constants::CAM_SENSITIVITY;
+    float pitch = -mouseDelta.y * Constants::CAM_SENSITIVITY;
+
+    glm::vec3 rotated = glm::vec3(
+        glm::rotate(glm::mat4(1.0f), glm::radians(yaw), worldUp) *
+        glm::vec4(offset, 0.0f));
+
+    glm::vec3 viewDir = glm::normalize(-rotated);
+    glm::vec3 right = glm::cross(viewDir, worldUp);
+    if (glm::length(right) < 0.001f) {
+        right = glm::vec3(1.0f, 0.0f, 0.0f);
+    } else {
+        right = glm::normalize(right);
+    }
+
+    glm::vec3 pitched = glm::vec3(
+        glm::rotate(glm::mat4(1.0f), glm::radians(pitch), right) *
+        glm::vec4(rotated, 0.0f));
+    glm::vec3 pitchedDir = glm::normalize(pitched);
+    if (std::abs(pitchedDir.y) > 0.94f) {
+        return rotated;
+    }
+
+    return pitched;
+}
+
+static bool projectWorldToScreen(const glm::vec3& worldPos,
+                                 const Camera& camera,
+                                 float aspectRatio,
+                                 int width,
+                                 int height,
+                                 ImVec2& screenPos,
+                                 float* depth = nullptr) {
+    glm::vec4 clip = camera.getProjectionMatrix(aspectRatio) *
+                     camera.getViewMatrix() *
+                     glm::vec4(worldPos, 1.0f);
+    if (clip.w <= 0.001f) return false;
+
+    glm::vec3 ndc = glm::vec3(clip) / clip.w;
+    if (ndc.z < -1.0f || ndc.z > 1.0f) return false;
+    screenPos.x = (ndc.x * 0.5f + 0.5f) * static_cast<float>(width);
+    screenPos.y = (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(height);
+    if (depth) *depth = ndc.z;
+    return ndc.x >= -1.2f && ndc.x <= 1.2f && ndc.y >= -1.2f && ndc.y <= 1.2f;
+}
+
+static void drawOutlinedText(ImDrawList* drawList,
+                             ImVec2 pos,
+                             ImU32 color,
+                             const std::string& text,
+                             float fontSize = 0.0f) {
+    ImU32 shadow = IM_COL32(0, 0, 0, 210);
+    ImFont* font = ImGui::GetFont();
+    drawList->AddText(font, fontSize, ImVec2(pos.x + 1.0f, pos.y + 1.0f),
+                      shadow, text.c_str());
+    drawList->AddText(font, fontSize, pos, color, text.c_str());
+}
+
+static CelestialBody* pickBodyAtScreen(SolarSystem& solarSystem,
+                                       const Camera& camera,
+                                       float aspectRatio,
+                                       int width,
+                                       int height,
+                                       const glm::vec2& mousePos) {
+    CelestialBody* best = nullptr;
+    float bestScore = std::numeric_limits<float>::max();
+
+    for (CelestialBody* body : solarSystem.getBodies()) {
+        ImVec2 screen;
+        float depth = 0.0f;
+        if (!projectWorldToScreen(body->getWorldPosition(), camera, aspectRatio,
+                                  width, height, screen, &depth)) {
+            continue;
+        }
+
+        float cameraDistance = glm::length(camera.getPosition() - body->getWorldPosition());
+        float angular = body->getRenderRadius() /
+                        std::max(cameraDistance, 0.001f);
+        float radiusPixels = angular /
+            std::tan(glm::radians(camera.getFov()) * 0.5f) *
+            static_cast<float>(height) * 0.5f;
+        float pickRadius = std::clamp(radiusPixels, 10.0f, 80.0f);
+        float dx = mousePos.x - screen.x;
+        float dy = mousePos.y - screen.y;
+        float dist = std::sqrt(dx * dx + dy * dy);
+        if (dist <= pickRadius) {
+            float score = dist + depth * 8.0f;
+            if (score < bestScore) {
+                bestScore = score;
+                best = body;
+            }
+        }
+    }
+
+    return best;
+}
+
+static void drawSceneLabels(SolarSystem& solarSystem,
+                            CelestialBody* selectedBody,
+                            const Camera& camera,
+                            float aspectRatio,
+                            int width,
+                            int height) {
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+
+    for (CelestialBody* body : solarSystem.getBodies()) {
+        glm::vec3 labelPos = body->getWorldPosition() +
+                             glm::vec3(0.0f, body->getRenderRadius() * 1.25f, 0.0f);
+        ImVec2 screen;
+        if (!projectWorldToScreen(labelPos, camera, aspectRatio, width, height, screen)) {
+            continue;
+        }
+
+        bool selected = body == selectedBody;
+        ImU32 bodyColor = selected ? IM_COL32(255, 220, 90, 255)
+                                   : IM_COL32(220, 235, 255, 230);
+        if (selected) {
+            drawList->AddCircle(ImVec2(screen.x - 8.0f, screen.y + 7.0f),
+                                4.0f, bodyColor, 16, 1.5f);
+        }
+
+        drawOutlinedText(drawList, screen, bodyColor, body->getName(), 15.0f);
+
+        const CelestialParams& params = body->getParams();
+        if (params.semiMajorAxisAU > 0.0f) {
+            std::string orbitLabel = "orbit " + formatAu(params.semiMajorAxisAU);
+            drawOutlinedText(drawList, ImVec2(screen.x, screen.y + 16.0f),
+                             IM_COL32(150, 190, 230, 210), orbitLabel, 12.0f);
+        }
+    }
+}
+
+static void drawBodyInfoPanel(CelestialBody* selectedBody,
+                              const Camera& camera,
+                              int width,
+                              bool* open) {
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(width) - 330.0f, 70.0f),
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(310.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.78f);
+
+    if (ImGui::Begin("Body Info", open,
+                     ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (!selectedBody) {
+            ImGui::TextDisabled("No body selected");
+            ImGui::End();
+            return;
+        }
+
+        const CelestialParams& p = selectedBody->getParams();
+        float cameraDistance = glm::length(camera.getPosition() -
+                                           selectedBody->getWorldPosition());
+        ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.35f, 1.0f),
+                           "%s", selectedBody->getName().c_str());
+        ImGui::Separator();
+        if (p.realRadiusKm > 0.0f) {
+            ImGui::Text("Radius: %.1f km", p.realRadiusKm);
+        }
+        ImGui::Text("Render radius: %.3f", selectedBody->getRenderRadius());
+        if (p.semiMajorAxisAU > 0.0f) {
+            ImGui::Text("Current distance: %s", formatAu(currentDistanceAu(selectedBody)).c_str());
+            ImGui::Text("Semi-major axis: %s", formatAu(p.semiMajorAxisAU).c_str());
+            ImGui::Text("Eccentricity: %.4f", p.orbit.eccentricity);
+            ImGui::Text("Inclination: %.3f deg", p.orbit.inclination);
+        }
+        if (p.orbitPeriodDays > 0.0f) {
+            ImGui::Text("Orbit period: %.2f days", p.orbitPeriodDays);
+        }
+        if (std::abs(p.rotationPeriodHours) > 0.001f) {
+            ImGui::Text("Rotation period: %.2f h", p.rotationPeriodHours);
+        }
+        ImGui::Text("Camera distance: %.2f", cameraDistance);
+    }
+    ImGui::End();
+}
+
 int main() {
     std::srand(static_cast<unsigned>(std::time(nullptr)));
     writeLog("---- SolarSystem startup ----");
@@ -125,9 +356,10 @@ int main() {
 
         Camera       camera(glm::vec3(0.0f, 350.0f, 800.0f), -90.0f, -25.0f);
         Time         time;
-        Renderer     renderer;
-        SolarSystem  solarSystem;
-        Skybox       skybox;
+        ResourceManager resources;
+        Renderer     renderer(resources);
+        SolarSystem  solarSystem(resources);
+        Skybox       skybox(resources);
         try {
             skybox.load("assets/textures/skybox/starmap_2020_4k.png");
         } catch (const std::exception& e) {
@@ -140,10 +372,48 @@ int main() {
         float timeScale        = Constants::DEFAULT_TIME_SCALE;
         float savedTimeScale   = timeScale;
         bool  escWasDown       = false;
+        bool  f5WasDown        = false;
+        bool  leftWasDown      = false;
+        bool  showInfoOverlay  = false;
+        bool  cursorDisabled   = true;
         bool  wantsQuit        = false;
+        bool  cameraFollow     = false;
+        SceneId activeScene    = SceneCatalog::defaultScene();
+        CelestialBody* selectedBody = solarSystem.getEarth();
+        glm::vec3 followOffset = defaultFollowOffset(selectedBody);
 
         float ambientStrength  = Constants::AMBIENT_STRENGTH;
         Renderer::PostProcessSettings postProcessSettings;
+        std::string shaderReloadStatus;
+        auto reloadShaders = [&]() {
+            std::string reloadError;
+            if (resources.reloadShaders(&reloadError)) {
+                shaderReloadStatus = "Shaders reloaded";
+            } else {
+                shaderReloadStatus = "Reload failed";
+                if (!reloadError.empty()) {
+                    writeLog(reloadError, "SolarSystem_shader_reload.log");
+                }
+            }
+        };
+        auto applyCursorState = [&](bool disabled) {
+            if (cursorDisabled == disabled) return;
+            window.setCursorDisabled(disabled);
+            input.resetMouse();
+            cursorDisabled = disabled;
+        };
+        auto focusBody = [&](CelestialBody* body, bool follow) {
+            if (!body) return;
+            selectedBody = body;
+            cameraFollow = follow;
+            followOffset = defaultFollowOffset(body);
+            glm::vec3 target = body->getWorldPosition();
+            camera.setPosition(target + followOffset);
+            camera.lookAt(target);
+        };
+        auto followBody = [&](CelestialBody* body) {
+            focusBody(body, true);
+        };
 
         time.setTimeScale(timeScale);
 
@@ -163,6 +433,14 @@ int main() {
             }
             escWasDown = escDown;
 
+            bool f5Down = glfwGetKey(window.getHandle(), GLFW_KEY_F5) == GLFW_PRESS;
+            if (f5Down && !f5WasDown) {
+                reloadShaders();
+            }
+            f5WasDown = f5Down;
+            bool leftDown =
+                glfwGetMouseButton(window.getHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+
             // --- Top bar ---
             {
                 ImGui::SetNextWindowPos(ImVec2(10, 10));
@@ -174,6 +452,18 @@ int main() {
                                  ImGuiWindowFlags_NoFocusOnAppearing)) {
                     if (ImGui::Button(showSettings ? "Hide Panel" : "Settings")) {
                         showSettings = !showSettings;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(showInfoOverlay ? "Hide Info" : "Info")) {
+                        showInfoOverlay = !showInfoOverlay;
+                    }
+                    if (cameraFollow && selectedBody) {
+                        ImGui::SameLine();
+                        if (ImGui::Button("Stop Follow")) {
+                            cameraFollow = false;
+                        }
+                        ImGui::SameLine();
+                        ImGui::Text("Following: %s", selectedBody->getName().c_str());
                     }
                     ImGui::SameLine();
 
@@ -193,11 +483,35 @@ int main() {
             // --- Settings panel ---
             if (showSettings) {
                 ImGui::SetNextWindowPos(ImVec2(10, 60), ImGuiCond_Once);
-                ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_Once);
+                ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_Once);
 
                 if (ImGui::Begin("Control Panel", &showSettings,
                                  ImGuiWindowFlags_NoResize |
                                  ImGuiWindowFlags_AlwaysAutoResize)) {
+
+                    ImGui::TextColored(ImVec4(0.85f, 0.72f, 1.0f, 1.0f), "Scene");
+                    ImGui::Separator();
+                    const SceneDescriptor& activeSceneDesc =
+                        SceneCatalog::descriptor(activeScene);
+                    ImGui::PushItemWidth(220);
+                    if (ImGui::BeginCombo("Scene Select", activeSceneDesc.name)) {
+                        for (const SceneDescriptor& scene : SceneCatalog::entries()) {
+                            bool selected = scene.id == activeScene;
+                            ImGui::BeginDisabled(!scene.available);
+                            if (ImGui::Selectable(scene.name, selected) && scene.available) {
+                                activeScene = scene.id;
+                                cameraFollow = false;
+                                showInfoOverlay = false;
+                            }
+                            ImGui::EndDisabled();
+                            if (selected) {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::PopItemWidth();
+                    ImGui::Spacing();
 
                     ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Time Control");
                     ImGui::Separator();
@@ -268,6 +582,13 @@ int main() {
                     ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "Lighting");
                     ImGui::Separator();
                     ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 2.0f, "%.3f");
+                    const char* debugModes[] = {"Lit", "Raw Texture", "UV", "Normals"};
+                    int debugMode = solarSystem.getDebugMode();
+                    ImGui::PushItemWidth(180);
+                    if (ImGui::Combo("Debug View", &debugMode, debugModes, 4)) {
+                        solarSystem.setDebugMode(debugMode);
+                    }
+                    ImGui::PopItemWidth();
 
                     bool showAtmosphere = solarSystem.getShowAtmosphere();
                     if (ImGui::Checkbox("Atmospheric Scattering", &showAtmosphere)) {
@@ -295,29 +616,49 @@ int main() {
                     ImGui::SliderInt("Bloom Radius", &postProcessSettings.blurPasses, 0, 12);
                     ImGui::PopItemWidth();
 
+                    if (ImGui::Button("Reload Shaders", ImVec2(140, 0))) {
+                        reloadShaders();
+                    }
+                    if (!shaderReloadStatus.empty()) {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("%s", shaderReloadStatus.c_str());
+                    }
+
                     ImGui::Spacing();
 
                     // ---- Planets ----
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Planets");
                     ImGui::Separator();
 
-                    auto planetSlider = [](const char* name, CelestialBody* body) {
+                    auto planetSlider = [&](const char* name, CelestialBody* body) {
                         float mult = body->getRotationSpeedMultiplier();
                         float base = body->getBaseRotationSpeed();
-                        ImGui::PushID(name);
+                        ImGui::PushID(body);
                         ImGui::AlignTextToFramePadding();
-                        ImGui::Text("%s", name);
-                        ImGui::SameLine(100);
-                        ImGui::PushItemWidth(150);
+                        if (selectedBody == body) {
+                            ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.28f, 1.0f), "%s", name);
+                        } else {
+                            ImGui::Text("%s", name);
+                        }
+                        ImGui::SameLine(92);
+                        ImGui::PushItemWidth(118);
                         if (ImGui::SliderFloat("##rot", &mult, 0.0f, 10.0f, "%.2fx")) {
                             body->setRotationSpeedMultiplier(mult);
                         }
                         ImGui::PopItemWidth();
                         ImGui::SameLine();
-                        ImGui::TextDisabled("%.2f rad/s", base * mult);
+                        if (ImGui::Button("Select and Follow", ImVec2(132, 0))) {
+                            showInfoOverlay = true;
+                            followBody(body);
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("%.2f", base * mult);
                         ImGui::PopID();
                     };
 
+                    if (auto* sun = solarSystem.getSun()) {
+                        planetSlider(sun->getName().c_str(), sun);
+                    }
                     for (auto& planet : solarSystem.getPlanets()) {
                         planetSlider(planet->getName().c_str(), planet.get());
                     }
@@ -345,13 +686,12 @@ int main() {
                 savedTimeScale = timeScale;
                 timeScale      = 0.0f;
                 time.setTimeScale(0.0f);
-                window.setCursorDisabled(false);
             } else if (!showSettings && prevShowSettings) {
                 timeScale = savedTimeScale;
                 time.setTimeScale(savedTimeScale);
-                window.setCursorDisabled(true);
             }
             prevShowSettings = showSettings;
+            applyCursorState(!showSettings && !showInfoOverlay);
 
             // --- Input: ONLY when panel is closed ---
             if (!showSettings) {
@@ -378,23 +718,42 @@ int main() {
                         time.setTimeScale(timeScale);
                     }
 
-                    float camSpeed = Constants::CAM_SPEED;
-                    if (input.isKeyDown(GLFW_KEY_LEFT_SHIFT))
-                        camSpeed = Constants::CAM_SPEED_FAST;
-                    if (input.isKeyDown(GLFW_KEY_W)) camera.moveForward( camSpeed * time.getRawDeltaTime());
-                    if (input.isKeyDown(GLFW_KEY_S)) camera.moveForward(-camSpeed * time.getRawDeltaTime());
-                    if (input.isKeyDown(GLFW_KEY_A)) camera.moveRight(  -camSpeed * time.getRawDeltaTime());
-                    if (input.isKeyDown(GLFW_KEY_D)) camera.moveRight(   camSpeed * time.getRawDeltaTime());
-                    if (input.isKeyDown(GLFW_KEY_Q)) camera.moveUp(     -camSpeed * time.getRawDeltaTime());
-                    if (input.isKeyDown(GLFW_KEY_E)) camera.moveUp(      camSpeed * time.getRawDeltaTime());
+                    if (!cameraFollow) {
+                        float camSpeed = Constants::CAM_SPEED;
+                        if (input.isKeyDown(GLFW_KEY_LEFT_SHIFT))
+                            camSpeed = Constants::CAM_SPEED_FAST;
+                        if (input.isKeyDown(GLFW_KEY_W)) camera.moveForward( camSpeed * time.getRawDeltaTime());
+                        if (input.isKeyDown(GLFW_KEY_S)) camera.moveForward(-camSpeed * time.getRawDeltaTime());
+                        if (input.isKeyDown(GLFW_KEY_A)) camera.moveRight(  -camSpeed * time.getRawDeltaTime());
+                        if (input.isKeyDown(GLFW_KEY_D)) camera.moveRight(   camSpeed * time.getRawDeltaTime());
+                        if (input.isKeyDown(GLFW_KEY_Q)) camera.moveUp(     -camSpeed * time.getRawDeltaTime());
+                        if (input.isKeyDown(GLFW_KEY_E)) camera.moveUp(      camSpeed * time.getRawDeltaTime());
+                    }
                 }
 
-                if (!io.WantCaptureMouse) {
+                if (!io.WantCaptureMouse && !leftDown) {
                     glm::vec2 mouseDelta = input.getMouseDelta();
-                    camera.rotate(mouseDelta.x * Constants::CAM_SENSITIVITY,
-                                 -mouseDelta.y * Constants::CAM_SENSITIVITY);
+                    if (cameraFollow && selectedBody) {
+                        followOffset = rotateFollowOffset(followOffset, mouseDelta);
+                        camera.setPosition(selectedBody->getWorldPosition() + followOffset);
+                        camera.lookAt(selectedBody->getWorldPosition());
+                    } else {
+                        camera.rotate(mouseDelta.x * Constants::CAM_SENSITIVITY,
+                                     -mouseDelta.y * Constants::CAM_SENSITIVITY);
+                    }
                     float scroll = io.MouseWheel;
-                    if (scroll != 0.0f) camera.zoom(scroll * 2.0f);
+                    if (scroll != 0.0f) {
+                        if (cameraFollow && selectedBody) {
+                            float scale = std::pow(0.88f, scroll);
+                            float minDistance = std::max(selectedBody->getRenderRadius() * 2.2f, 2.0f);
+                            float maxDistance = std::max(selectedBody->getRenderRadius() * 80.0f, 80.0f);
+                            float distance = glm::length(followOffset);
+                            float newDistance = std::clamp(distance * scale, minDistance, maxDistance);
+                            followOffset = glm::normalize(followOffset) * newDistance;
+                        } else {
+                            camera.zoom(scroll * 2.0f);
+                        }
+                    }
                 }
             }
 
@@ -405,12 +764,35 @@ int main() {
             int framebufferWidth = window.getWidth();
             int framebufferHeight = window.getHeight();
             float aspectRatio = window.getAspectRatio();
+
+            if (showInfoOverlay && !showSettings &&
+                leftDown && !leftWasDown && !io.WantCaptureMouse) {
+                if (CelestialBody* picked = pickBodyAtScreen(solarSystem, camera, aspectRatio,
+                                                             framebufferWidth, framebufferHeight,
+                                                             input.getMousePosition())) {
+                    followBody(picked);
+                }
+            }
+
+            if (cameraFollow && selectedBody) {
+                glm::vec3 target = selectedBody->getWorldPosition();
+                camera.setPosition(target + followOffset);
+                camera.lookAt(target);
+            }
+            leftWasDown = leftDown;
+
             renderer.beginScene(framebufferWidth, framebufferHeight);
             renderer.clear();
             renderer.setViewport(framebufferWidth, framebufferHeight);
             renderer.drawSkybox(camera, skybox, aspectRatio);
             renderer.drawSolarSystem(solarSystem, camera, aspectRatio);
             renderer.endScene(postProcessSettings);
+
+            if (showInfoOverlay) {
+                drawSceneLabels(solarSystem, selectedBody, camera, aspectRatio,
+                                framebufferWidth, framebufferHeight);
+                drawBodyInfoPanel(selectedBody, camera, framebufferWidth, &showInfoOverlay);
+            }
 
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

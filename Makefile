@@ -49,12 +49,14 @@ SRCS := main.cpp \
         $(SRC_DIR)/render/Mesh.cpp \
         $(SRC_DIR)/render/Texture.cpp \
         $(SRC_DIR)/render/SphereMesh.cpp \
+        $(SRC_DIR)/render/ResourceManager.cpp \
         $(SRC_DIR)/render/Skybox.cpp \
         $(SRC_DIR)/render/Renderer.cpp \
         $(SRC_DIR)/scene/CelestialBody.cpp \
         $(SRC_DIR)/scene/Planet.cpp \
         $(SRC_DIR)/scene/Star.cpp \
         $(SRC_DIR)/scene/Orbit.cpp \
+        $(SRC_DIR)/scene/SceneCatalog.cpp \
         $(SRC_DIR)/scene/SolarSystemConfig.cpp \
         $(SRC_DIR)/scene/SolarSystem.cpp \
         $(SRC_DIR)/utils/Paths.cpp \

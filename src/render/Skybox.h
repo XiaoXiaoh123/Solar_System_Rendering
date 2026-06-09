@@ -1,11 +1,15 @@
 #pragma once
 
-#include "Shader.h"
+#include <glm/glm.hpp>
 #include <string>
+
+class ResourceManager;
+class Shader;
+class Texture;
 
 class Skybox {
 public:
-    Skybox();
+    explicit Skybox(ResourceManager& resources);
     ~Skybox();
 
     void load(const std::string& equirectPath);
@@ -14,9 +18,10 @@ public:
 private:
     void setupMesh();
 
-    unsigned int m_texture = 0;
+    ResourceManager& m_resources;
+    const Texture* m_texture = nullptr;
     unsigned int m_vao     = 0;
     unsigned int m_vbo     = 0;
     bool         m_meshReady = false;
-    Shader       m_shader;
+    Shader*      m_shader = nullptr;
 };

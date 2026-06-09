@@ -5,6 +5,7 @@
 
 class Camera;
 class SolarSystem;
+class ResourceManager;
 
 class Renderer {
 public:
@@ -16,7 +17,7 @@ public:
         int   blurPasses     = 6;
     };
 
-    Renderer();
+    explicit Renderer(ResourceManager& resources);
     ~Renderer();
 
     void beginScene(int width, int height);
@@ -33,9 +34,9 @@ private:
     bool ensurePostProcessTargets(int width, int height);
     void drawFullscreenQuad();
 
-    Shader m_extractShader;
-    Shader m_blurShader;
-    Shader m_compositeShader;
+    Shader* m_extractShader = nullptr;
+    Shader* m_blurShader = nullptr;
+    Shader* m_compositeShader = nullptr;
 
     unsigned int m_hdrFbo = 0;
     unsigned int m_hdrColorTexture = 0;

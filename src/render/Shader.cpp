@@ -51,12 +51,6 @@ static std::string readFile(const std::string& path) {
 }
 
 void Shader::load(const std::string& vertexPath, const std::string& fragmentPath) {
-    if (m_programId) {
-        glDeleteProgram(m_programId);
-        m_programId = 0;
-        m_uniformLocationCount = 0;
-    }
-
     std::string vertSource, fragSource;
     try {
         vertSource = readFile(vertexPath);
@@ -65,24 +59,42 @@ void Shader::load(const std::string& vertexPath, const std::string& fragmentPath
         throw std::runtime_error(std::string("Shader file error: ") + e.what());
     }
 
-    unsigned int vertShader = compileShader(GL_VERTEX_SHADER, vertSource);
-    unsigned int fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);
+    unsigned int vertShader = 0;
+    unsigned int fragShader = 0;
+    unsigned int newProgram = 0;
 
-    m_programId = glCreateProgram();
-    glAttachShader(m_programId, vertShader);
-    glAttachShader(m_programId, fragShader);
-    glLinkProgram(m_programId);
+    try {
+        vertShader = compileShader(GL_VERTEX_SHADER, vertSource);
+        fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);
 
-    int success;
-    glGetProgramiv(m_programId, GL_LINK_STATUS, &success);
-    if (!success) {
-        char infoLog[1024];
-        glGetProgramInfoLog(m_programId, 1024, nullptr, infoLog);
-        throw std::runtime_error("Shader program link error:\n" + std::string(infoLog));
+        newProgram = glCreateProgram();
+        glAttachShader(newProgram, vertShader);
+        glAttachShader(newProgram, fragShader);
+        glLinkProgram(newProgram);
+
+        int success;
+        glGetProgramiv(newProgram, GL_LINK_STATUS, &success);
+        if (!success) {
+            char infoLog[1024];
+            glGetProgramInfoLog(newProgram, 1024, nullptr, infoLog);
+            throw std::runtime_error("Shader program link error:\n" + std::string(infoLog));
+        }
+    } catch (...) {
+        if (vertShader) glDeleteShader(vertShader);
+        if (fragShader) glDeleteShader(fragShader);
+        if (newProgram) glDeleteProgram(newProgram);
+        throw;
     }
 
     glDeleteShader(vertShader);
     glDeleteShader(fragShader);
+
+    if (m_programId) {
+        glDeleteProgram(m_programId);
+    }
+    m_programId = newProgram;
+    m_uniformLocationCache = {};
+    m_uniformLocationCount = 0;
 }
 
 unsigned int Shader::compileShader(unsigned int type, const std::string& source) {
@@ -97,6 +109,7 @@ unsigned int Shader::compileShader(unsigned int type, const std::string& source)
         char infoLog[1024];
         glGetShaderInfoLog(shader, 1024, nullptr, infoLog);
         std::string typeName = (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
+        glDeleteShader(shader);
         throw std::runtime_error("Shader compile error (" + typeName + "):\n" + std::string(infoLog));
     }
 

@@ -8,6 +8,7 @@
 
 class Camera;
 class Shader;
+class ResourceManager;
 
 struct AtmosphereTuning {
     float intensity           = 1.0f;
@@ -25,7 +26,7 @@ enum class ScaleMode {
 
 class SolarSystem {
 public:
-    SolarSystem();
+    explicit SolarSystem(ResourceManager& resources);
 
     void update(const class Time& time);
     void drawAll(Camera& camera, float aspectRatio);
@@ -36,6 +37,7 @@ public:
     const std::vector<std::unique_ptr<Planet>>& getPlanets() const { return m_planets; }
     std::vector<std::unique_ptr<Planet>>&       getPlanets()       { return m_planets; }
     Planet*        getMoon()    const { return m_moon.get(); }
+    std::vector<CelestialBody*> getBodies() const;
 
     void  setTimeScale(float scale);
     float getTimeScale() const { return m_timeScale; }
@@ -46,6 +48,8 @@ public:
     const AtmosphereTuning& getAtmosphereTuning() const { return m_atmosphereTuning; }
     void      setScaleMode(ScaleMode mode);
     ScaleMode getScaleMode() const { return m_scaleMode; }
+    void      setDebugMode(int mode);
+    int       getDebugMode() const { return m_debugMode; }
 
 private:
     void applyScaleMode();
@@ -59,14 +63,16 @@ private:
     std::vector<CelestialBody*>          m_orbitBodies;
     std::unique_ptr<Orbit>               m_moonOrbit;
     CelestialBody*                       m_earth = nullptr;
+    ResourceManager&                     m_resources;
 
-    Shader m_planetShader;
-    Shader m_sunShader;
-    Shader m_atmosphereShader;
+    Shader* m_planetShader = nullptr;
+    Shader* m_sunShader = nullptr;
+    Shader* m_atmosphereShader = nullptr;
 
     float m_timeScale         = 1.0f;
     float m_ambientStrength   = 0.08f;
     bool  m_showAtmosphere    = true;
+    int   m_debugMode         = 0;
     AtmosphereTuning m_atmosphereTuning;
     ScaleMode m_scaleMode = ScaleMode::Artistic;
 };

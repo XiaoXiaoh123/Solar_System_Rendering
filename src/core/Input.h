@@ -9,6 +9,7 @@ public:
     explicit Input(GLFWwindow* window);
 
     void update();
+    void resetMouse();
 
     bool isKeyDown(int key) const;
 

@@ -22,3 +22,12 @@ void Input::update() {
 bool Input::isKeyDown(int key) const {
     return glfwGetKey(m_window, key) == GLFW_PRESS;
 }
+
+void Input::resetMouse() {
+    double x, y;
+    glfwGetCursorPos(m_window, &x, &y);
+    m_mousePos = glm::vec2(static_cast<float>(x), static_cast<float>(y));
+    m_lastMousePos = m_mousePos;
+    m_mouseDelta = glm::vec2(0.0f);
+    m_firstMouse = false;
+}
