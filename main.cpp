@@ -19,8 +19,10 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <cstdlib>
+#include <sstream>
 #include <ctime>
 
 #ifdef _WIN32
@@ -41,6 +43,46 @@ static void showError(const std::string& msg) {
     MessageBoxA(nullptr, msg.c_str(), "Solar System - Fatal Error",
                 MB_OK | MB_ICONERROR);
 #endif
+}
+
+struct SimDate {
+    int year = 2000;
+    int month = 1;
+    int day = 1;
+};
+
+static bool isLeapYear(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static int daysInMonth(int year, int month) {
+    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month == 2 && isLeapYear(year)) return 29;
+    return days[month - 1];
+}
+
+static SimDate dateFromEpochDays(int daysSinceEpoch) {
+    SimDate date;
+    while (daysSinceEpoch >= (isLeapYear(date.year) ? 366 : 365)) {
+        daysSinceEpoch -= isLeapYear(date.year) ? 366 : 365;
+        ++date.year;
+    }
+
+    while (daysSinceEpoch >= daysInMonth(date.year, date.month)) {
+        daysSinceEpoch -= daysInMonth(date.year, date.month);
+        ++date.month;
+    }
+
+    date.day += daysSinceEpoch;
+    return date;
+}
+
+static std::string formatDate(const SimDate& date) {
+    std::ostringstream out;
+    out << std::setfill('0') << std::setw(4) << date.year << "-"
+        << std::setw(2) << date.month << "-"
+        << std::setw(2) << date.day;
+    return out.str();
 }
 
 int main() {
@@ -135,18 +177,15 @@ int main() {
                     }
                     ImGui::SameLine();
 
-                    float earthAngle = 0.0f;
-                    for (auto& p : solarSystem.getPlanets()) {
-                        if (p->getName() == "Earth") {
-                            earthAngle = p->getOrbitAngle();
-                            break;
-                        }
-                    }
+                    float simDaysFloat = time.getElapsedTime() * Constants::DAYS_PER_SECOND;
+                    int simDays = std::max(0, static_cast<int>(std::floor(simDaysFloat)));
+                    SimDate simDate = dateFromEpochDays(simDays);
                     const char* paused = (timeScale == 0.0f) ? "[PAUSED]" : "";
                     ImGui::Text("FPS: %.0f  dt: %.4f  scale: %.3f %s",
                                 io.Framerate, time.getRawDeltaTime(),
                                 timeScale, paused);
-                    ImGui::Text("Earth orbit angle: %.2f rad", earthAngle);
+                    ImGui::Text("Date: %s  +%.1f days",
+                                formatDate(simDate).c_str(), simDaysFloat);
                 }
                 ImGui::End();
             }
@@ -213,6 +252,15 @@ int main() {
                     presetBtn("1x",   1.0f);   ImGui::SameLine();
                     presetBtn("5x",   5.0f);   ImGui::SameLine();
                     presetBtn("10x",  10.0f);
+
+                    ImGui::Spacing();
+                    const char* scaleModes[] = {"Artistic", "Real", "Logarithmic"};
+                    int scaleModeIndex = static_cast<int>(solarSystem.getScaleMode());
+                    ImGui::PushItemWidth(180);
+                    if (ImGui::Combo("Scale Mode", &scaleModeIndex, scaleModes, 3)) {
+                        solarSystem.setScaleMode(static_cast<ScaleMode>(scaleModeIndex));
+                    }
+                    ImGui::PopItemWidth();
 
                     ImGui::Spacing();
 

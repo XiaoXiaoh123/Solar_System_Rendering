@@ -3,13 +3,66 @@
 #include "../render/SphereMesh.h"
 #include "../core/Time.h"
 #include "../utils/Constants.h"
+
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+#include <algorithm>
 #include <cmath>
+
+namespace {
+
+float normalizeAngle(float angle) {
+    constexpr float twoPi = 2.0f * glm::pi<float>();
+    angle = std::fmod(angle, twoPi);
+    return angle < 0.0f ? angle + twoPi : angle;
+}
+
+float solveEccentricAnomaly(float meanAnomaly, float eccentricity) {
+    float e = std::clamp(eccentricity, 0.0f, 0.95f);
+    float E = meanAnomaly;
+
+    for (int i = 0; i < 6; ++i) {
+        float f = E - e * std::sin(E) - meanAnomaly;
+        float fp = 1.0f - e * std::cos(E);
+        E -= f / fp;
+    }
+
+    return E;
+}
+
+glm::vec3 rotateOrbitPlane(const glm::vec3& pos, const OrbitalElements& elements) {
+    glm::mat4 transform(1.0f);
+    transform = glm::rotate(transform, glm::radians(elements.longitudeAscendingNode),
+                            glm::vec3(0.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(elements.inclination),
+                            glm::vec3(1.0f, 0.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(elements.argumentPeriapsis),
+                            glm::vec3(0.0f, 1.0f, 0.0f));
+    return glm::vec3(transform * glm::vec4(pos, 1.0f));
+}
+
+glm::vec3 orbitalPosition(float meanAnomaly,
+                          float semiMajorAxis,
+                          const OrbitalElements& elements) {
+    if (semiMajorAxis <= 0.0f) return glm::vec3(0.0f);
+
+    float e = std::clamp(elements.eccentricity, 0.0f, 0.95f);
+    float E = solveEccentricAnomaly(normalizeAngle(meanAnomaly), e);
+    float x = semiMajorAxis * (std::cos(E) - e);
+    float z = semiMajorAxis * std::sqrt(std::max(0.0f, 1.0f - e * e)) * std::sin(E);
+    return rotateOrbitPlane(glm::vec3(x, 0.0f, z), elements);
+}
+
+} // namespace
 
 CelestialBody::CelestialBody(const CelestialParams& params)
     : m_params(params)
 {
-    m_mesh = SphereMesh::generate(params.radius);
+    m_mesh = SphereMesh::generate(1.0f);
+    m_renderRadius = params.radius;
+    m_renderSemiMajorAxis = params.orbitRadius;
+    m_renderAtmosphereRadius = params.radius * params.atmosphereScale;
 
     if (!params.texturePath.empty()) {
         try {
@@ -17,20 +70,9 @@ CelestialBody::CelestialBody(const CelestialParams& params)
         } catch (...) {}
     }
 
-    // Random starting orbital phase
-    m_orbitAngle = static_cast<float>(rand()) / RAND_MAX * 6.28318f;
+    m_orbitAngle = glm::radians(params.orbit.meanAnomalyAtEpoch);
 
-    // Convert real periods to simulation angular velocities (rad/s sim-time).
-    // 1 real second = DAYS_PER_SECOND simulation Earth-days.
-    //
-    // Orbit:  2*PI * DAYS_PER_SECOND / orbitPeriodDays
-    //   e.g. Earth: 2*PI * 30 / 365.25 ≈ 0.516 rad/s → orbit in ~12 real seconds
-    //
-    // Rotation:  real period = R_hours * 3600 seconds.
-    //   sim speed  = 2*PI / (R_hours*3600) * DAYS_PER_SECOND * 86400
-    //              = 2*PI * DAYS_PER_SECOND * 24 / R_hours
     constexpr float PI2 = 2.0f * 3.14159265f;
-
     if (m_params.orbitPeriodDays > 0.0f) {
         m_orbitSpeed = PI2 * Constants::DAYS_PER_SECOND / m_params.orbitPeriodDays;
     }
@@ -40,11 +82,10 @@ CelestialBody::CelestialBody(const CelestialParams& params)
                           / m_params.rotationPeriodHours;
     }
 
-    // Atmosphere
     m_hasAtmosphere = params.hasAtmosphere;
     if (m_hasAtmosphere) {
         m_atmosphereRadius = params.radius * params.atmosphereScale;
-        m_atmosphereMesh = SphereMesh::generate(m_atmosphereRadius);
+        m_atmosphereMesh = SphereMesh::generate(1.0f);
     }
 }
 
@@ -58,16 +99,15 @@ glm::vec3 CelestialBody::getParentWorldPosition() const {
     return m_parent ? m_parent->getWorldPosition() : glm::vec3(0.0f);
 }
 
+void CelestialBody::setRenderScale(float radius, float semiMajorAxis) {
+    m_renderRadius = std::max(radius, 0.0001f);
+    m_renderSemiMajorAxis = std::max(semiMajorAxis, 0.0f);
+    m_renderAtmosphereRadius = m_renderRadius * m_params.atmosphereScale;
+}
+
 glm::vec3 CelestialBody::getWorldPosition() const {
-    // Must match model matrix convention: R_y(angle) maps (R,0,0) → (R·cos, 0, -R·sin)
-    glm::vec3 localPos(0.0f);
-    if (m_params.orbitRadius > 0.0f) {
-        localPos = glm::vec3(
-             cos(m_orbitAngle) * m_params.orbitRadius,
-             0.0f,
-            -sin(m_orbitAngle) * m_params.orbitRadius
-        );
-    }
+    glm::vec3 localPos = orbitalPosition(m_orbitAngle, m_renderSemiMajorAxis,
+                                         m_params.orbit);
     if (m_parent) {
         return m_parent->getWorldPosition() + localPos;
     }
@@ -75,26 +115,22 @@ glm::vec3 CelestialBody::getWorldPosition() const {
 }
 
 glm::mat4 CelestialBody::getModelMatrix() const {
-    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 model(1.0f);
 
-    // Outermost: parent world offset (applied last in GLM → first on vertex)
     if (m_parent) {
         model = glm::translate(model, m_parent->getWorldPosition());
     }
 
-    // Orbit around local center (R_orbit * T_orbitRadius)
-    if (m_params.orbitRadius > 0.0f) {
-        model = glm::rotate(model, m_orbitAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::translate(model, glm::vec3(m_params.orbitRadius, 0.0f, 0.0f));
-    }
+    model = glm::translate(model, orbitalPosition(m_orbitAngle, m_renderSemiMajorAxis,
+                                                 m_params.orbit));
 
-    // Axial tilt
     if (m_params.axialTilt != 0.0f) {
-        model = glm::rotate(model, glm::radians(m_params.axialTilt), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::rotate(model, glm::radians(m_params.axialTilt),
+                            glm::vec3(0.0f, 0.0f, 1.0f));
     }
 
-    // Innermost: self rotation
     model = glm::rotate(model, m_rotationAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(m_renderRadius));
     return model;
 }
 
@@ -102,11 +138,14 @@ void CelestialBody::drawAtmosphere(Shader& shader) {
     if (!m_hasAtmosphere) return;
 
     glm::mat4 model = getModelMatrix();
+    if (m_renderRadius > 0.0001f) {
+        model = glm::scale(model, glm::vec3(m_renderAtmosphereRadius / m_renderRadius));
+    }
 
     shader.setMat4("uModel", model);
     shader.setVec3("uPlanetCenter", getWorldPosition());
-    shader.setFloat("uPlanetRadius", m_params.radius);
-    shader.setFloat("uAtmosphereRadius", m_atmosphereRadius);
+    shader.setFloat("uPlanetRadius", m_renderRadius);
+    shader.setFloat("uAtmosphereRadius", m_renderAtmosphereRadius);
 
     m_atmosphereMesh.draw();
 }
@@ -115,7 +154,6 @@ void CelestialBody::draw(Shader& shader) {
     glm::mat4 model = getModelMatrix();
     shader.setMat4("uModel", model);
 
-    // Compute normal matrix on CPU to avoid GPU-side inverse() precision issues
     glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
     shader.setMat3("uNormalMatrix", normalMatrix);
 

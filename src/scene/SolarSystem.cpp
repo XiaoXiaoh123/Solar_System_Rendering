@@ -6,9 +6,14 @@
 #include "../render/Shader.h"
 #include <glad/gl.h>
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace {
+
+constexpr float AU_KM = 149597870.7f;
+constexpr float AU_RENDER_SCALE = Constants::EARTH_ORBIT;
 
 struct AtmosphereProfile {
     glm::vec3 rayleighColor;
@@ -99,8 +104,10 @@ SolarSystem::SolarSystem() {
                 m_earth = planetPtr;
             }
             if (config.drawOrbit && config.params.orbitRadius > 0.0f) {
-                m_orbits.push_back(std::make_unique<Orbit>(config.params.orbitRadius,
+                m_orbits.push_back(std::make_unique<Orbit>(config.params.orbit,
+                                                           config.params.orbitRadius,
                                                            config.orbitColor));
+                m_orbitBodies.push_back(planetPtr);
             }
 
             bodiesByName.emplace_back(config.params.name, planetPtr);
@@ -140,9 +147,13 @@ SolarSystem::SolarSystem() {
         m_moon->setParent(parent);
 
         if (drawMoonOrbit) {
-            m_moonOrbit = std::make_unique<Orbit>(m_moon->getOrbitRadius(), moonOrbitColor);
+            m_moonOrbit = std::make_unique<Orbit>(m_moon->getParams().orbit,
+                                                  m_moon->getOrbitRadius(),
+                                                  moonOrbitColor);
         }
     }
+
+    applyScaleMode();
 }
 
 void SolarSystem::update(const Time& time) {
@@ -247,4 +258,69 @@ void SolarSystem::drawAll(Camera& camera, float aspectRatio) {
 
 void SolarSystem::setTimeScale(float scale) {
     m_timeScale = scale;
+}
+
+void SolarSystem::setScaleMode(ScaleMode mode) {
+    if (m_scaleMode == mode) return;
+    m_scaleMode = mode;
+    applyScaleMode();
+}
+
+float SolarSystem::scaledRadiusFor(const CelestialBody& body) const {
+    const CelestialParams& p = body.getParams();
+    if (m_scaleMode == ScaleMode::Artistic || p.realRadiusKm <= 0.0f) {
+        return p.radius;
+    }
+
+    if (m_scaleMode == ScaleMode::Real) {
+        return std::max(0.0001f, p.realRadiusKm / AU_KM * AU_RENDER_SCALE);
+    }
+
+    float radius = std::log10(1.0f + p.realRadiusKm / 1000.0f) * 2.2f;
+    if (p.name == "Sun") {
+        radius *= 1.8f;
+    }
+    return std::max(0.25f, radius);
+}
+
+float SolarSystem::scaledOrbitFor(const CelestialBody& body) const {
+    const CelestialParams& p = body.getParams();
+    if (m_scaleMode == ScaleMode::Artistic || p.semiMajorAxisAU <= 0.0f) {
+        return p.orbitRadius;
+    }
+
+    if (m_scaleMode == ScaleMode::Real) {
+        return p.semiMajorAxisAU * AU_RENDER_SCALE;
+    }
+
+    if (p.name == "Moon") {
+        return 4.0f + std::log10(1.0f + p.semiMajorAxisAU * 1000.0f) * 2.8f;
+    }
+
+    return 80.0f + std::log10(1.0f + p.semiMajorAxisAU * 2.8f) * 175.0f;
+}
+
+void SolarSystem::applyScaleMode() {
+    if (m_star) {
+        m_star->setRenderScale(scaledRadiusFor(*m_star), 0.0f);
+    }
+
+    for (auto& planet : m_planets) {
+        planet->setRenderScale(scaledRadiusFor(*planet), scaledOrbitFor(*planet));
+    }
+
+    if (m_moon) {
+        m_moon->setRenderScale(scaledRadiusFor(*m_moon), scaledOrbitFor(*m_moon));
+    }
+
+    for (std::size_t i = 0; i < m_orbits.size() && i < m_orbitBodies.size(); ++i) {
+        CelestialBody* body = m_orbitBodies[i];
+        if (body) {
+            m_orbits[i]->updatePath(body->getParams().orbit, scaledOrbitFor(*body));
+        }
+    }
+
+    if (m_moonOrbit && m_moon) {
+        m_moonOrbit->updatePath(m_moon->getParams().orbit, scaledOrbitFor(*m_moon));
+    }
 }

@@ -17,6 +17,12 @@ struct AtmosphereTuning {
     float terminatorWidth     = 0.28f;
 };
 
+enum class ScaleMode {
+    Artistic = 0,
+    Real = 1,
+    Logarithmic = 2
+};
+
 class SolarSystem {
 public:
     SolarSystem();
@@ -38,12 +44,19 @@ public:
     bool  getShowAtmosphere() const     { return m_showAtmosphere; }
     AtmosphereTuning&       getAtmosphereTuning()       { return m_atmosphereTuning; }
     const AtmosphereTuning& getAtmosphereTuning() const { return m_atmosphereTuning; }
+    void      setScaleMode(ScaleMode mode);
+    ScaleMode getScaleMode() const { return m_scaleMode; }
 
 private:
+    void applyScaleMode();
+    float scaledRadiusFor(const CelestialBody& body) const;
+    float scaledOrbitFor(const CelestialBody& body) const;
+
     std::unique_ptr<Star>                m_star;
     std::vector<std::unique_ptr<Planet>> m_planets;
     std::unique_ptr<Planet>              m_moon;
     std::vector<std::unique_ptr<Orbit>>  m_orbits;
+    std::vector<CelestialBody*>          m_orbitBodies;
     std::unique_ptr<Orbit>               m_moonOrbit;
     CelestialBody*                       m_earth = nullptr;
 
@@ -55,4 +68,5 @@ private:
     float m_ambientStrength   = 0.08f;
     bool  m_showAtmosphere    = true;
     AtmosphereTuning m_atmosphereTuning;
+    ScaleMode m_scaleMode = ScaleMode::Artistic;
 };

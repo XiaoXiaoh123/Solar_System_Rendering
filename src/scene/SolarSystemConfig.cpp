@@ -223,6 +223,17 @@ BodyConfig makeConfig(const ConfigSection& section) {
     config.params.name                = getString(section, "name", section.name);
     config.params.radius              = getFloat(section, "radius", 1.0f);
     config.params.orbitRadius         = getFloat(section, "orbitRadius", 0.0f);
+    config.params.realRadiusKm        = getFloat(section, "realRadiusKm", 0.0f);
+    config.params.semiMajorAxisAU     = getFloat(section, "semiMajorAxisAU", 0.0f);
+    config.params.orbit.semiMajorAxis = config.params.orbitRadius;
+    config.params.orbit.eccentricity  = getFloat(section, "eccentricity", 0.0f);
+    config.params.orbit.inclination   = getFloat(section, "inclination", 0.0f);
+    config.params.orbit.longitudeAscendingNode =
+        getFloat(section, "longitudeAscendingNode", 0.0f);
+    config.params.orbit.argumentPeriapsis =
+        getFloat(section, "argumentPeriapsis", 0.0f);
+    config.params.orbit.meanAnomalyAtEpoch =
+        getFloat(section, "meanAnomalyAtEpoch", 0.0f);
     config.params.orbitPeriodDays     = getFloat(section, "orbitPeriodDays", 0.0f);
     config.params.rotationPeriodHours = getFloat(section, "rotationPeriodHours", 0.0f);
     config.params.axialTilt           = getFloat(section, "axialTilt", 0.0f);
@@ -242,64 +253,120 @@ BodyConfig makeConfig(const ConfigSection& section) {
 } // namespace
 
 std::vector<BodyConfig> SolarSystemConfig::defaults() {
+    auto makeParams = [](const std::string& name,
+                         float radius,
+                         float orbitRadius,
+                         float realRadiusKm,
+                         float semiMajorAxisAU,
+                         float eccentricity,
+                         float inclination,
+                         float longitudeAscendingNode,
+                         float argumentPeriapsis,
+                         float meanAnomalyAtEpoch,
+                         float orbitPeriodDays,
+                         float rotationPeriodHours,
+                         float axialTilt,
+                         const std::string& texturePath,
+                         bool hasAtmosphere = false,
+                         float atmosphereScale = 1.05f) {
+        CelestialParams p;
+        p.name = name;
+        p.radius = radius;
+        p.orbitRadius = orbitRadius;
+        p.realRadiusKm = realRadiusKm;
+        p.semiMajorAxisAU = semiMajorAxisAU;
+        p.orbit.semiMajorAxis = orbitRadius;
+        p.orbit.eccentricity = eccentricity;
+        p.orbit.inclination = inclination;
+        p.orbit.longitudeAscendingNode = longitudeAscendingNode;
+        p.orbit.argumentPeriapsis = argumentPeriapsis;
+        p.orbit.meanAnomalyAtEpoch = meanAnomalyAtEpoch;
+        p.orbitPeriodDays = orbitPeriodDays;
+        p.rotationPeriodHours = rotationPeriodHours;
+        p.axialTilt = axialTilt;
+        p.texturePath = texturePath;
+        p.hasAtmosphere = hasAtmosphere;
+        p.atmosphereScale = atmosphereScale;
+        return p;
+    };
+
     return {
         {BodyConfig::Type::Star,
-         {"Sun", Constants::SUN_RADIUS, 0.0f, 0.0f, 0.0f, 0.0f,
-          "assets/textures/sun.jpg"},
+         makeParams("Sun", Constants::SUN_RADIUS, 0.0f, 695700.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 0.0f, "assets/textures/sun.jpg"),
          "", false, glm::vec3(0.3f, 0.3f, 0.5f)},
 
         {BodyConfig::Type::Planet,
-         {"Mercury", Constants::MERCURY_RADIUS, Constants::MERCURY_ORBIT,
-          Constants::MERCURY_ORBIT_PERIOD, Constants::MERCURY_ROT_PERIOD,
-          Constants::MERCURY_TILT, "assets/textures/mercury.jpg"},
+         makeParams("Mercury", Constants::MERCURY_RADIUS, Constants::MERCURY_ORBIT,
+                    2439.7f, 0.387098f, 0.205630f, 7.005f, 48.331f,
+                    29.124f, 174.796f, Constants::MERCURY_ORBIT_PERIOD,
+                    Constants::MERCURY_ROT_PERIOD, Constants::MERCURY_TILT,
+                    "assets/textures/mercury.jpg"),
          "", true, glm::vec3(0.34f, 0.32f, 0.38f)},
 
         {BodyConfig::Type::Planet,
-         {"Venus", Constants::VENUS_RADIUS, Constants::VENUS_ORBIT,
-          Constants::VENUS_ORBIT_PERIOD, Constants::VENUS_ROT_PERIOD,
-          Constants::VENUS_TILT, "assets/textures/venus_surface.jpg", true, 1.055f},
+         makeParams("Venus", Constants::VENUS_RADIUS, Constants::VENUS_ORBIT,
+                    6051.8f, 0.723332f, 0.006772f, 3.394f, 76.680f,
+                    54.922f, 50.115f, Constants::VENUS_ORBIT_PERIOD,
+                    Constants::VENUS_ROT_PERIOD, Constants::VENUS_TILT,
+                    "assets/textures/venus_surface.jpg", true, 1.055f),
          "", true, glm::vec3(0.48f, 0.40f, 0.30f)},
 
         {BodyConfig::Type::Planet,
-         {"Earth", Constants::EARTH_RADIUS, Constants::EARTH_ORBIT,
-          Constants::EARTH_ORBIT_PERIOD, Constants::EARTH_ROT_PERIOD,
-          Constants::EARTH_TILT, "assets/textures/earth_daymap.jpg", true, 1.035f},
+         makeParams("Earth", Constants::EARTH_RADIUS, Constants::EARTH_ORBIT,
+                    6371.0f, 1.000000f, 0.016708f, 0.000f, 0.0f,
+                    102.937f, 357.517f, Constants::EARTH_ORBIT_PERIOD,
+                    Constants::EARTH_ROT_PERIOD, Constants::EARTH_TILT,
+                    "assets/textures/earth_daymap.jpg", true, 1.035f),
          "", true, glm::vec3(0.26f, 0.42f, 0.65f)},
 
         {BodyConfig::Type::Planet,
-         {"Mars", Constants::MARS_RADIUS, Constants::MARS_ORBIT,
-          Constants::MARS_ORBIT_PERIOD, Constants::MARS_ROT_PERIOD,
-          Constants::MARS_TILT, "assets/textures/mars.jpg", true, 1.025f},
+         makeParams("Mars", Constants::MARS_RADIUS, Constants::MARS_ORBIT,
+                    3389.5f, 1.523679f, 0.093400f, 1.850f, 49.558f,
+                    286.543f, 19.373f, Constants::MARS_ORBIT_PERIOD,
+                    Constants::MARS_ROT_PERIOD, Constants::MARS_TILT,
+                    "assets/textures/mars.jpg", true, 1.025f),
          "", true, glm::vec3(0.55f, 0.30f, 0.25f)},
 
         {BodyConfig::Type::Planet,
-         {"Jupiter", Constants::JUPITER_RADIUS, Constants::JUPITER_ORBIT,
-          Constants::JUPITER_ORBIT_PERIOD, Constants::JUPITER_ROT_PERIOD,
-          Constants::JUPITER_TILT, "assets/textures/jupiter.jpg"},
+         makeParams("Jupiter", Constants::JUPITER_RADIUS, Constants::JUPITER_ORBIT,
+                    69911.0f, 5.2044f, 0.0489f, 1.303f, 100.464f,
+                    -86.133f, 20.020f, Constants::JUPITER_ORBIT_PERIOD,
+                    Constants::JUPITER_ROT_PERIOD, Constants::JUPITER_TILT,
+                    "assets/textures/jupiter.jpg"),
          "", true, glm::vec3(0.50f, 0.43f, 0.34f)},
 
         {BodyConfig::Type::Planet,
-         {"Saturn", Constants::SATURN_RADIUS, Constants::SATURN_ORBIT,
-          Constants::SATURN_ORBIT_PERIOD, Constants::SATURN_ROT_PERIOD,
-          Constants::SATURN_TILT, "assets/textures/saturn.jpg"},
+         makeParams("Saturn", Constants::SATURN_RADIUS, Constants::SATURN_ORBIT,
+                    58232.0f, 9.5826f, 0.0565f, 2.485f, 113.665f,
+                    -20.608f, 317.020f, Constants::SATURN_ORBIT_PERIOD,
+                    Constants::SATURN_ROT_PERIOD, Constants::SATURN_TILT,
+                    "assets/textures/saturn.jpg"),
          "", true, glm::vec3(0.58f, 0.52f, 0.38f)},
 
         {BodyConfig::Type::Planet,
-         {"Uranus", Constants::URANUS_RADIUS, Constants::URANUS_ORBIT,
-          Constants::URANUS_ORBIT_PERIOD, Constants::URANUS_ROT_PERIOD,
-          Constants::URANUS_TILT, "assets/textures/uranus.jpg"},
+         makeParams("Uranus", Constants::URANUS_RADIUS, Constants::URANUS_ORBIT,
+                    25362.0f, 19.2184f, 0.0463f, 0.773f, 74.006f,
+                    99.0f, 142.238f, Constants::URANUS_ORBIT_PERIOD,
+                    Constants::URANUS_ROT_PERIOD, Constants::URANUS_TILT,
+                    "assets/textures/uranus.jpg"),
          "", true, glm::vec3(0.35f, 0.55f, 0.60f)},
 
         {BodyConfig::Type::Planet,
-         {"Neptune", Constants::NEPTUNE_RADIUS, Constants::NEPTUNE_ORBIT,
-          Constants::NEPTUNE_ORBIT_PERIOD, Constants::NEPTUNE_ROT_PERIOD,
-          Constants::NEPTUNE_TILT, "assets/textures/neptune.jpg"},
+         makeParams("Neptune", Constants::NEPTUNE_RADIUS, Constants::NEPTUNE_ORBIT,
+                    24622.0f, 30.110f, 0.0090f, 1.770f, 131.784f,
+                    -83.660f, 256.228f, Constants::NEPTUNE_ORBIT_PERIOD,
+                    Constants::NEPTUNE_ROT_PERIOD, Constants::NEPTUNE_TILT,
+                    "assets/textures/neptune.jpg"),
          "", true, glm::vec3(0.30f, 0.42f, 0.70f)},
 
         {BodyConfig::Type::Moon,
-         {"Moon", Constants::MOON_RADIUS, Constants::MOON_ORBIT,
-          Constants::MOON_ORBIT_PERIOD, Constants::MOON_ROT_PERIOD,
-          0.0f, "assets/textures/moon.jpg"},
+         makeParams("Moon", Constants::MOON_RADIUS, Constants::MOON_ORBIT,
+                    1737.4f, 0.00257f, 0.0549f, 5.145f, 125.08f,
+                    318.15f, 135.27f, Constants::MOON_ORBIT_PERIOD,
+                    Constants::MOON_ROT_PERIOD, 0.0f,
+                    "assets/textures/moon.jpg"),
          "Earth", true, glm::vec3(0.4f, 0.4f, 0.5f)}
     };
 }
