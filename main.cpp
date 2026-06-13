@@ -5,6 +5,7 @@
 #include "src/render/ResourceManager.h"
 #include "src/render/Renderer.h"
 #include "src/render/Skybox.h"
+#include "src/scene/BlackHoleScene.h"
 #include "src/scene/SceneCatalog.h"
 #include "src/scene/SolarSystem.h"
 #include "src/utils/Constants.h"
@@ -26,6 +27,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <ctime>
@@ -354,17 +356,102 @@ int main() {
         ImGui_ImplGlfw_InitForOpenGL(window.getHandle(), true);
         ImGui_ImplOpenGL3_Init("#version 460");
 
+        auto drawLoadingScreen = [&](const char* status, float progress) {
+            window.updateFramebufferSize();
+            int width = std::max(window.getWidth(), 1);
+            int height = std::max(window.getHeight(), 1);
+            progress = std::clamp(progress, 0.0f, 1.0f);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, width, height);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glClearColor(0.008f, 0.010f, 0.016f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
+            ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(static_cast<float>(width),
+                                            static_cast<float>(height)),
+                                     ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            ImGuiWindowFlags flags =
+                ImGuiWindowFlags_NoDecoration |
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoBringToFrontOnFocus;
+            if (ImGui::Begin("##loading", nullptr, flags)) {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                ImVec2 canvasMin = ImGui::GetWindowPos();
+                ImVec2 canvasMax(canvasMin.x + static_cast<float>(width),
+                                  canvasMin.y + static_cast<float>(height));
+                drawList->AddRectFilled(canvasMin, canvasMax,
+                                        IM_COL32(2, 4, 10, 255));
+                drawList->AddRectFilledMultiColor(
+                    canvasMin, canvasMax,
+                    IM_COL32(10, 18, 34, 255),
+                    IM_COL32(18, 12, 34, 255),
+                    IM_COL32(3, 5, 12, 255),
+                    IM_COL32(3, 8, 18, 255));
+
+                ImVec2 center(static_cast<float>(width) * 0.5f,
+                              static_cast<float>(height) * 0.52f);
+                ImGui::SetCursorScreenPos(ImVec2(center.x - 210.0f,
+                                                 center.y - 54.0f));
+                ImGui::TextColored(ImVec4(0.88f, 0.92f, 1.0f, 1.0f),
+                                   "Solar System Rendering");
+                ImGui::SetCursorScreenPos(ImVec2(center.x - 210.0f,
+                                                 center.y - 22.0f));
+                ImGui::TextColored(ImVec4(0.62f, 0.72f, 0.88f, 1.0f),
+                                   "%s", status);
+                ImGui::SetCursorScreenPos(ImVec2(center.x - 210.0f,
+                                                 center.y + 12.0f));
+                ImGui::ProgressBar(progress, ImVec2(420.0f, 12.0f), "");
+                ImGui::SetCursorScreenPos(ImVec2(center.x - 210.0f,
+                                                 center.y + 34.0f));
+                ImGui::TextDisabled("%.0f%%", progress * 100.0f);
+            }
+            ImGui::End();
+
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            window.swapBuffers();
+            window.pollEvents();
+        };
+
+        drawLoadingScreen("Preparing OpenGL state", 0.06f);
+
         Camera       camera(glm::vec3(0.0f, 350.0f, 800.0f), -90.0f, -25.0f);
         Time         time;
+        writeLog("init: creating resource manager");
+        drawLoadingScreen("Creating resource manager", 0.12f);
         ResourceManager resources;
+        writeLog("init: creating renderer");
+        drawLoadingScreen("Compiling post-process shaders", 0.22f);
         Renderer     renderer(resources);
+        writeLog("init: creating solar system");
+        drawLoadingScreen("Loading solar system bodies and textures", 0.42f);
         SolarSystem  solarSystem(resources);
+        writeLog("init: black hole scene deferred");
+        std::unique_ptr<BlackHoleScene> blackHoleScene;
+        writeLog("init: creating skybox");
+        drawLoadingScreen("Preparing skybox", 0.78f);
         Skybox       skybox(resources);
         try {
+            writeLog("init: loading skybox texture");
+            drawLoadingScreen("Loading star field", 0.86f);
             skybox.load("assets/textures/skybox/starmap_2020_4k.png");
+            writeLog("init: skybox loaded");
         } catch (const std::exception& e) {
             std::cerr << "Skybox: " << e.what() << std::endl;
+            writeLog(std::string("init: skybox load failed: ") + e.what());
         }
+        drawLoadingScreen("Ready", 1.0f);
+        writeLog("init: resources ready");
 
         // --- Settings state ---
         bool  showSettings     = false;
@@ -373,6 +460,7 @@ int main() {
         float savedTimeScale   = timeScale;
         bool  escWasDown       = false;
         bool  f5WasDown        = false;
+        bool  spaceWasDown     = false;
         bool  leftWasDown      = false;
         bool  showInfoOverlay  = false;
         bool  cursorDisabled   = true;
@@ -414,11 +502,24 @@ int main() {
         auto followBody = [&](CelestialBody* body) {
             focusBody(body, true);
         };
+        auto ensureBlackHoleScene = [&]() -> BlackHoleScene& {
+            if (!blackHoleScene) {
+                writeLog("lazy: creating black hole scene");
+                blackHoleScene = std::make_unique<BlackHoleScene>(resources);
+                writeLog("lazy: black hole scene ready");
+            }
+            return *blackHoleScene;
+        };
 
         time.setTimeScale(timeScale);
 
         // --- Main loop ---
         while (!window.shouldClose() && !wantsQuit) {
+            static bool firstFrameLogged = false;
+            if (!firstFrameLogged) {
+                writeLog("main loop: first frame begin");
+                firstFrameLogged = true;
+            }
             time.tick();
             input.update();
 
@@ -438,6 +539,7 @@ int main() {
                 reloadShaders();
             }
             f5WasDown = f5Down;
+            bool spaceDown = glfwGetKey(window.getHandle(), GLFW_KEY_SPACE) == GLFW_PRESS;
             bool leftDown =
                 glfwGetMouseButton(window.getHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
@@ -453,29 +555,36 @@ int main() {
                     if (ImGui::Button(showSettings ? "Hide Panel" : "Settings")) {
                         showSettings = !showSettings;
                     }
-                    ImGui::SameLine();
-                    if (ImGui::Button(showInfoOverlay ? "Hide Info" : "Info")) {
-                        showInfoOverlay = !showInfoOverlay;
-                    }
-                    if (cameraFollow && selectedBody) {
+                    if (activeScene == SceneId::SolarSystem) {
                         ImGui::SameLine();
-                        if (ImGui::Button("Stop Follow")) {
-                            cameraFollow = false;
+                        if (ImGui::Button(showInfoOverlay ? "Hide Info" : "Info")) {
+                            showInfoOverlay = !showInfoOverlay;
                         }
-                        ImGui::SameLine();
-                        ImGui::Text("Following: %s", selectedBody->getName().c_str());
+                        if (cameraFollow && selectedBody) {
+                            ImGui::SameLine();
+                            if (ImGui::Button("Stop Follow")) {
+                                cameraFollow = false;
+                            }
+                            ImGui::SameLine();
+                            ImGui::Text("Following: %s", selectedBody->getName().c_str());
+                        }
                     }
                     ImGui::SameLine();
 
-                    float simDaysFloat = time.getElapsedTime() * Constants::DAYS_PER_SECOND;
-                    int simDays = std::max(0, static_cast<int>(std::floor(simDaysFloat)));
-                    SimDate simDate = dateFromEpochDays(simDays);
                     const char* paused = (timeScale == 0.0f) ? "[PAUSED]" : "";
                     ImGui::Text("FPS: %.0f  dt: %.4f  scale: %.3f %s",
                                 io.Framerate, time.getRawDeltaTime(),
                                 timeScale, paused);
-                    ImGui::Text("Date: %s  +%.1f days",
-                                formatDate(simDate).c_str(), simDaysFloat);
+                    if (activeScene == SceneId::SolarSystem) {
+                        float simDaysFloat = time.getElapsedTime() * Constants::DAYS_PER_SECOND;
+                        int simDays = std::max(0, static_cast<int>(std::floor(simDaysFloat)));
+                        SimDate simDate = dateFromEpochDays(simDays);
+                        ImGui::Text("Date: %s  +%.1f days",
+                                    formatDate(simDate).c_str(), simDaysFloat);
+                    } else {
+                        ImGui::Text("Scene: %s",
+                                    SceneCatalog::descriptor(activeScene).name);
+                    }
                 }
                 ImGui::End();
             }
@@ -502,6 +611,12 @@ int main() {
                                 activeScene = scene.id;
                                 cameraFollow = false;
                                 showInfoOverlay = false;
+                                if (activeScene == SceneId::BlackHole) {
+                                    ensureBlackHoleScene().resetCamera(camera);
+                                } else if (selectedBody) {
+                                    camera.setPosition(glm::vec3(0.0f, 350.0f, 800.0f));
+                                    camera.lookAt(selectedBody->getWorldPosition());
+                                }
                             }
                             ImGui::EndDisabled();
                             if (selected) {
@@ -568,40 +683,47 @@ int main() {
                     presetBtn("10x",  10.0f);
 
                     ImGui::Spacing();
-                    const char* scaleModes[] = {"Artistic", "Real", "Logarithmic"};
-                    int scaleModeIndex = static_cast<int>(solarSystem.getScaleMode());
-                    ImGui::PushItemWidth(180);
-                    if (ImGui::Combo("Scale Mode", &scaleModeIndex, scaleModes, 3)) {
-                        solarSystem.setScaleMode(static_cast<ScaleMode>(scaleModeIndex));
+
+                    if (activeScene == SceneId::SolarSystem) {
+                        const char* scaleModes[] = {"Artistic", "Real", "Logarithmic"};
+                        int scaleModeIndex = static_cast<int>(solarSystem.getScaleMode());
+                        ImGui::PushItemWidth(180);
+                        if (ImGui::Combo("Scale Mode", &scaleModeIndex, scaleModes, 3)) {
+                            solarSystem.setScaleMode(static_cast<ScaleMode>(scaleModeIndex));
+                        }
+                        ImGui::PopItemWidth();
                     }
-                    ImGui::PopItemWidth();
 
                     ImGui::Spacing();
 
-                    // ---- Lighting ----
-                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "Lighting");
-                    ImGui::Separator();
-                    ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 2.0f, "%.3f");
-                    const char* debugModes[] = {"Lit", "Raw Texture", "UV", "Normals"};
-                    int debugMode = solarSystem.getDebugMode();
-                    ImGui::PushItemWidth(180);
-                    if (ImGui::Combo("Debug View", &debugMode, debugModes, 4)) {
-                        solarSystem.setDebugMode(debugMode);
-                    }
-                    ImGui::PopItemWidth();
+                    if (activeScene == SceneId::SolarSystem) {
+                        // ---- Lighting ----
+                        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "Lighting");
+                        ImGui::Separator();
+                        ImGui::SliderFloat("Ambient", &ambientStrength, 0.0f, 2.0f, "%.3f");
+                        const char* debugModes[] = {"Lit", "Raw Texture", "UV", "Normals"};
+                        int debugMode = solarSystem.getDebugMode();
+                        ImGui::PushItemWidth(180);
+                        if (ImGui::Combo("Debug View", &debugMode, debugModes, 4)) {
+                            solarSystem.setDebugMode(debugMode);
+                        }
+                        ImGui::PopItemWidth();
 
-                    bool showAtmosphere = solarSystem.getShowAtmosphere();
-                    if (ImGui::Checkbox("Atmospheric Scattering", &showAtmosphere)) {
-                        solarSystem.setShowAtmosphere(showAtmosphere);
+                        bool showAtmosphere = solarSystem.getShowAtmosphere();
+                        if (ImGui::Checkbox("Atmospheric Scattering", &showAtmosphere)) {
+                            solarSystem.setShowAtmosphere(showAtmosphere);
+                        }
+                        AtmosphereTuning& atmosphere = solarSystem.getAtmosphereTuning();
+                        ImGui::PushItemWidth(180);
+                        ImGui::SliderFloat("Atmo Intensity", &atmosphere.intensity, 0.0f, 2.0f, "%.2f");
+                        ImGui::SliderFloat("Edge Glow", &atmosphere.edgeStrength, 0.0f, 2.5f, "%.2f");
+                        ImGui::SliderFloat("Sunset Band", &atmosphere.sunsetStrength, 0.0f, 2.5f, "%.2f");
+                        ImGui::SliderFloat("Backscatter", &atmosphere.backscatterStrength, 0.0f, 2.5f, "%.2f");
+                        ImGui::SliderFloat("Terminator", &atmosphere.terminatorWidth, 0.05f, 0.65f, "%.2f");
+                        ImGui::PopItemWidth();
+                    } else {
+                        ensureBlackHoleScene().drawControls(camera);
                     }
-                    AtmosphereTuning& atmosphere = solarSystem.getAtmosphereTuning();
-                    ImGui::PushItemWidth(180);
-                    ImGui::SliderFloat("Atmo Intensity", &atmosphere.intensity, 0.0f, 2.0f, "%.2f");
-                    ImGui::SliderFloat("Edge Glow", &atmosphere.edgeStrength, 0.0f, 2.5f, "%.2f");
-                    ImGui::SliderFloat("Sunset Band", &atmosphere.sunsetStrength, 0.0f, 2.5f, "%.2f");
-                    ImGui::SliderFloat("Backscatter", &atmosphere.backscatterStrength, 0.0f, 2.5f, "%.2f");
-                    ImGui::SliderFloat("Terminator", &atmosphere.terminatorWidth, 0.05f, 0.65f, "%.2f");
-                    ImGui::PopItemWidth();
 
                     ImGui::Spacing();
                     ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "Post FX");
@@ -626,44 +748,46 @@ int main() {
 
                     ImGui::Spacing();
 
-                    // ---- Planets ----
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Planets");
-                    ImGui::Separator();
+                    if (activeScene == SceneId::SolarSystem) {
+                        // ---- Planets ----
+                        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Planets");
+                        ImGui::Separator();
 
-                    auto planetSlider = [&](const char* name, CelestialBody* body) {
-                        float mult = body->getRotationSpeedMultiplier();
-                        float base = body->getBaseRotationSpeed();
-                        ImGui::PushID(body);
-                        ImGui::AlignTextToFramePadding();
-                        if (selectedBody == body) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.28f, 1.0f), "%s", name);
-                        } else {
-                            ImGui::Text("%s", name);
-                        }
-                        ImGui::SameLine(92);
-                        ImGui::PushItemWidth(118);
-                        if (ImGui::SliderFloat("##rot", &mult, 0.0f, 10.0f, "%.2fx")) {
-                            body->setRotationSpeedMultiplier(mult);
-                        }
-                        ImGui::PopItemWidth();
-                        ImGui::SameLine();
-                        if (ImGui::Button("Select and Follow", ImVec2(132, 0))) {
-                            showInfoOverlay = true;
-                            followBody(body);
-                        }
-                        ImGui::SameLine();
-                        ImGui::TextDisabled("%.2f", base * mult);
-                        ImGui::PopID();
-                    };
+                        auto planetSlider = [&](const char* name, CelestialBody* body) {
+                            float mult = body->getRotationSpeedMultiplier();
+                            float base = body->getBaseRotationSpeed();
+                            ImGui::PushID(body);
+                            ImGui::AlignTextToFramePadding();
+                            if (selectedBody == body) {
+                                ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.28f, 1.0f), "%s", name);
+                            } else {
+                                ImGui::Text("%s", name);
+                            }
+                            ImGui::SameLine(92);
+                            ImGui::PushItemWidth(118);
+                            if (ImGui::SliderFloat("##rot", &mult, 0.0f, 10.0f, "%.2fx")) {
+                                body->setRotationSpeedMultiplier(mult);
+                            }
+                            ImGui::PopItemWidth();
+                            ImGui::SameLine();
+                            if (ImGui::Button("Select and Follow", ImVec2(132, 0))) {
+                                showInfoOverlay = true;
+                                followBody(body);
+                            }
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("%.2f", base * mult);
+                            ImGui::PopID();
+                        };
 
-                    if (auto* sun = solarSystem.getSun()) {
-                        planetSlider(sun->getName().c_str(), sun);
-                    }
-                    for (auto& planet : solarSystem.getPlanets()) {
-                        planetSlider(planet->getName().c_str(), planet.get());
-                    }
-                    if (auto* moon = solarSystem.getMoon()) {
-                        planetSlider(moon->getName().c_str(), moon);
+                        if (auto* sun = solarSystem.getSun()) {
+                            planetSlider(sun->getName().c_str(), sun);
+                        }
+                        for (auto& planet : solarSystem.getPlanets()) {
+                            planetSlider(planet->getName().c_str(), planet.get());
+                        }
+                        if (auto* moon = solarSystem.getMoon()) {
+                            planetSlider(moon->getName().c_str(), moon);
+                        }
                     }
 
                     ImGui::Spacing();
@@ -707,7 +831,7 @@ int main() {
                         time.setTimeScale(timeScale);
                         if (timeScale > 0.0f) savedTimeScale = timeScale;
                     }
-                    if (input.isKeyDown(GLFW_KEY_SPACE)) {
+                    if (spaceDown && !spaceWasDown) {
                         if (timeScale > 0.0f) {
                             savedTimeScale = timeScale;
                             timeScale      = 0.0f;
@@ -717,6 +841,7 @@ int main() {
                         }
                         time.setTimeScale(timeScale);
                     }
+                    spaceWasDown = spaceDown;
 
                     if (!cameraFollow) {
                         float camSpeed = Constants::CAM_SPEED;
@@ -729,6 +854,8 @@ int main() {
                         if (input.isKeyDown(GLFW_KEY_Q)) camera.moveUp(     -camSpeed * time.getRawDeltaTime());
                         if (input.isKeyDown(GLFW_KEY_E)) camera.moveUp(      camSpeed * time.getRawDeltaTime());
                     }
+                } else {
+                    spaceWasDown = spaceDown;
                 }
 
                 if (!io.WantCaptureMouse && !leftDown) {
@@ -755,17 +882,24 @@ int main() {
                         }
                     }
                 }
+            } else {
+                spaceWasDown = spaceDown;
             }
 
             // --- Update & Render ---
-            solarSystem.update(time);
-            solarSystem.setAmbientStrength(ambientStrength);
+            if (activeScene == SceneId::SolarSystem) {
+                solarSystem.update(time);
+                solarSystem.setAmbientStrength(ambientStrength);
+            } else {
+                ensureBlackHoleScene().update(time);
+            }
 
             int framebufferWidth = window.getWidth();
             int framebufferHeight = window.getHeight();
             float aspectRatio = window.getAspectRatio();
 
-            if (showInfoOverlay && !showSettings &&
+            if (activeScene == SceneId::SolarSystem &&
+                showInfoOverlay && !showSettings &&
                 leftDown && !leftWasDown && !io.WantCaptureMouse) {
                 if (CelestialBody* picked = pickBodyAtScreen(solarSystem, camera, aspectRatio,
                                                              framebufferWidth, framebufferHeight,
@@ -774,7 +908,7 @@ int main() {
                 }
             }
 
-            if (cameraFollow && selectedBody) {
+            if (activeScene == SceneId::SolarSystem && cameraFollow && selectedBody) {
                 glm::vec3 target = selectedBody->getWorldPosition();
                 camera.setPosition(target + followOffset);
                 camera.lookAt(target);
@@ -785,13 +919,25 @@ int main() {
             renderer.clear();
             renderer.setViewport(framebufferWidth, framebufferHeight);
             renderer.drawSkybox(camera, skybox, aspectRatio);
-            renderer.drawSolarSystem(solarSystem, camera, aspectRatio);
-            renderer.endScene(postProcessSettings);
+            if (activeScene == SceneId::SolarSystem) {
+                renderer.drawSolarSystem(solarSystem, camera, aspectRatio);
+            } else {
+                ensureBlackHoleScene().draw(camera, aspectRatio);
+            }
+            Renderer::LensSettings lensSettings;
+            if (activeScene == SceneId::BlackHole) {
+                lensSettings = ensureBlackHoleScene().lensSettings(camera, aspectRatio);
+            }
+            renderer.endScene(postProcessSettings, lensSettings);
 
-            if (showInfoOverlay) {
+            if (activeScene == SceneId::SolarSystem && showInfoOverlay) {
                 drawSceneLabels(solarSystem, selectedBody, camera, aspectRatio,
                                 framebufferWidth, framebufferHeight);
                 drawBodyInfoPanel(selectedBody, camera, framebufferWidth, &showInfoOverlay);
+            } else if (activeScene == SceneId::BlackHole) {
+                ensureBlackHoleScene().drawTeachingOverlay(camera, aspectRatio,
+                                                           framebufferWidth,
+                                                           framebufferHeight);
             }
 
             ImGui::Render();

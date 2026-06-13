@@ -34,6 +34,7 @@ set(SCENE_SOURCES
     src/scene/SceneCatalog.cpp
     src/scene/SolarSystemConfig.cpp
     src/scene/SolarSystem.cpp
+    src/scene/BlackHoleScene.cpp
 )
 
 set(UTILS_SOURCES

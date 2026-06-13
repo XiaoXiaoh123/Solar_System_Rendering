@@ -7,7 +7,8 @@
 #include <algorithm>
 #include <stdexcept>
 
-Renderer::Renderer(ResourceManager& resources) {
+Renderer::Renderer(ResourceManager& resources)
+    : m_resources(resources) {
     m_extractShader = &resources.getShader("assets/shaders/bloom_extract.vert",
                                            "assets/shaders/bloom_extract.frag");
     m_blurShader = &resources.getShader("assets/shaders/bloom_blur.vert",
@@ -55,13 +56,17 @@ void Renderer::setupFullscreenQuad() {
 
 void Renderer::releasePostProcessTargets() {
     if (m_hdrColorTexture) glDeleteTextures(1, &m_hdrColorTexture);
+    if (m_lensTexture) glDeleteTextures(1, &m_lensTexture);
     if (m_depthRbo) glDeleteRenderbuffers(1, &m_depthRbo);
+    if (m_lensFbo) glDeleteFramebuffers(1, &m_lensFbo);
     if (m_hdrFbo) glDeleteFramebuffers(1, &m_hdrFbo);
     glDeleteTextures(2, m_pingpongTexture);
     glDeleteFramebuffers(2, m_pingpongFbo);
 
     m_hdrFbo = 0;
     m_hdrColorTexture = 0;
+    m_lensFbo = 0;
+    m_lensTexture = 0;
     m_depthRbo = 0;
     m_pingpongFbo[0] = m_pingpongFbo[1] = 0;
     m_pingpongTexture[0] = m_pingpongTexture[1] = 0;
@@ -108,6 +113,25 @@ bool Renderer::ensurePostProcessTargets(int width, int height) {
         throw std::runtime_error("HDR framebuffer is incomplete");
     }
 
+    glGenFramebuffers(1, &m_lensFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_lensFbo);
+
+    glGenTextures(1, &m_lensTexture);
+    glBindTexture(GL_TEXTURE_2D, m_lensTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0,
+                 GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, m_lensTexture, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        throw std::runtime_error("Lens framebuffer is incomplete");
+    }
+
     glGenFramebuffers(2, m_pingpongFbo);
     glGenTextures(2, m_pingpongTexture);
     for (int i = 0; i < 2; ++i) {
@@ -146,7 +170,8 @@ void Renderer::drawFullscreenQuad() {
     glBindVertexArray(0);
 }
 
-void Renderer::endScene(const PostProcessSettings& settings) {
+void Renderer::endScene(const PostProcessSettings& settings,
+                        const LensSettings& lensSettings) {
     if (!m_postProcessReady) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return;
@@ -157,6 +182,55 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
+    unsigned int sceneTexture = m_hdrColorTexture;
+
+    if (lensSettings.enabled && m_lensFbo && m_lensTexture) {
+        if (!m_lensShader) {
+            m_lensShader = &m_resources.getShader(
+                "assets/shaders/gravitational_lensing.vert",
+                "assets/shaders/gravitational_lensing.frag");
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, m_lensFbo);
+        glViewport(0, 0, m_targetWidth, m_targetHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+        m_lensShader->use();
+        m_lensShader->setInt("uScene", 0);
+        m_lensShader->setInt("uRayMarchEnabled",
+                             lensSettings.rayMarchEnabled ? 1 : 0);
+        m_lensShader->setVec2("uCenter", lensSettings.center);
+        m_lensShader->setMat4("uViewProjection",
+                              lensSettings.viewProjection);
+        m_lensShader->setMat4("uInverseViewProjection",
+                              lensSettings.inverseViewProjection);
+        m_lensShader->setVec3("uCameraPos", lensSettings.cameraPosition);
+        m_lensShader->setVec3("uBlackHoleCenter",
+                              lensSettings.blackHoleCenter);
+        m_lensShader->setFloat("uEventHorizonRadius",
+                               lensSettings.eventHorizonRadius);
+        m_lensShader->setFloat("uPhotonSphereRadius",
+                               lensSettings.photonSphereRadius);
+        m_lensShader->setFloat("uWorldEventHorizonRadius",
+                               lensSettings.worldEventHorizonRadius);
+        m_lensShader->setFloat("uWorldPhotonSphereRadius",
+                               lensSettings.worldPhotonSphereRadius);
+        m_lensShader->setFloat("uLensStrength", lensSettings.strength);
+        m_lensShader->setFloat("uRingStrength", lensSettings.ringStrength);
+        m_lensShader->setFloat("uSpin", lensSettings.spin);
+        m_lensShader->setFloat("uLensAsymmetry", lensSettings.asymmetry);
+        m_lensShader->setFloat("uShadowSoftness", lensSettings.shadowSoftness);
+        m_lensShader->setFloat("uStepScale", lensSettings.stepScale);
+        m_lensShader->setFloat("uMassStrength", lensSettings.massStrength);
+        m_lensShader->setFloat("uCaptureRadiusScale",
+                               lensSettings.captureRadiusScale);
+        m_lensShader->setFloat("uAspectRatio", lensSettings.aspectRatio);
+        m_lensShader->setInt("uRaySteps", lensSettings.raySteps);
+        m_lensShader->setInt("uDebugMode", lensSettings.debugMode);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_hdrColorTexture);
+        drawFullscreenQuad();
+        sceneTexture = m_lensTexture;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, m_pingpongFbo[0]);
     glViewport(0, 0, m_bloomWidth, m_bloomHeight);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -164,7 +238,7 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     m_extractShader->setInt("uScene", 0);
     m_extractShader->setFloat("uThreshold", settings.bloomThreshold);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_hdrColorTexture);
+    glBindTexture(GL_TEXTURE_2D, sceneTexture);
     drawFullscreenQuad();
 
     bool horizontal = true;
@@ -197,7 +271,7 @@ void Renderer::endScene(const PostProcessSettings& settings) {
     m_compositeShader->setFloat("uExposure", settings.exposure);
     m_compositeShader->setFloat("uBloomStrength", settings.bloomStrength);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_hdrColorTexture);
+    glBindTexture(GL_TEXTURE_2D, sceneTexture);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_pingpongTexture[bloomTextureIndex]);
     drawFullscreenQuad();

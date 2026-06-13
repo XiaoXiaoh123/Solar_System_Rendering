@@ -59,6 +59,7 @@ SRCS := main.cpp \
         $(SRC_DIR)/scene/SceneCatalog.cpp \
         $(SRC_DIR)/scene/SolarSystemConfig.cpp \
         $(SRC_DIR)/scene/SolarSystem.cpp \
+        $(SRC_DIR)/scene/BlackHoleScene.cpp \
         $(SRC_DIR)/utils/Paths.cpp \
         $(IMGUI_SRCS)
 

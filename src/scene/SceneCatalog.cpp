@@ -4,7 +4,7 @@ namespace {
 
 const std::array<SceneDescriptor, 2> kScenes = {{
     {SceneId::SolarSystem, "Solar System", true},
-    {SceneId::BlackHole, "Black Hole (planned)", false}
+    {SceneId::BlackHole, "Black Hole", true}
 }};
 
 } // namespace
