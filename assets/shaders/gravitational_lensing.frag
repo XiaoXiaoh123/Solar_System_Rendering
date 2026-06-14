@@ -18,6 +18,9 @@ uniform float uLensStrength;
 uniform float uRingStrength;
 uniform float uSpin;
 uniform float uLensAsymmetry;
+uniform float uFrameDragging;
+uniform float uRingAsymmetry;
+uniform float uShadowOffset;
 uniform float uShadowSoftness;
 uniform float uStepScale;
 uniform float uMassStrength;
@@ -40,6 +43,14 @@ vec2 fromLensSpace(vec2 p) {
 vec3 safeNormalize(vec3 v, vec3 fallback) {
     float len = length(v);
     return len > 0.00001 ? v / len : fallback;
+}
+
+float spinSigned() {
+    return clamp(uSpin, -1.0, 1.0);
+}
+
+float lensSqr(float value) {
+    return value * value;
 }
 
 vec3 reconstructRay(vec2 uv) {
@@ -68,28 +79,36 @@ vec2 radialLensUv(vec2 lensPos,
                   float eventRadius,
                   float photonRadius,
                   float influence,
-                  out float bendField) {
+                  out float bendField,
+                  out float kerrField) {
     float bend = uLensStrength * photonRadius * photonRadius /
                  max(r * r, photonRadius * photonRadius * 0.12);
     bend *= influence;
     bend *= smoothstep(eventRadius * 0.92, photonRadius * 0.9, r);
 
     vec2 tangent = vec2(-dir.y, dir.x);
-    float spinInfluence = influence * smoothstep(eventRadius * 0.9,
-                                                 photonRadius * 2.4,
-                                                 r);
-    float spinBend = clamp(uSpin, -1.0, 1.0) * uLensAsymmetry *
-                     photonRadius * 0.38 * spinInfluence /
-                     max(1.0 + r / photonRadius, 1.0);
+    float spinSign = spinSigned();
+    float nearRingOffset = (r - photonRadius) /
+                           max(photonRadius * 0.85, 0.002);
+    float nearRing = exp(-lensSqr(nearRingOffset));
+    float innerFade = smoothstep(eventRadius * 0.82,
+                                 eventRadius * 1.15,
+                                 r);
+    float spinInfluence = influence * innerFade * (0.35 + nearRing * 0.65);
+    float drag = spinSign * uLensAsymmetry * uFrameDragging;
+    float spinBend = drag * photonRadius * 0.62 * spinInfluence /
+                     max(1.0 + r / photonRadius * 0.45, 1.0);
 
     bendField = abs(bend) + abs(spinBend);
+    kerrField = abs(spinBend) + abs(drag) * nearRing * influence * 0.08;
     return fromLensSpace(lensPos + dir * bend + tangent * spinBend);
 }
 
 vec2 rayMarchLensUv(float screenInfluence,
                     out float closestDistance,
                     out float captured,
-                    out float bendField) {
+                    out float bendField,
+                    out float kerrField) {
     vec3 direction = reconstructRay(TexCoord);
     vec3 toCenterFromCamera = uBlackHoleCenter - uCameraPos;
     float centerDistance = length(toCenterFromCamera);
@@ -99,7 +118,7 @@ vec2 rayMarchLensUv(float screenInfluence,
     float startT = max(0.0, closestAlongRay - marchRadius);
     float endT = closestAlongRay + marchRadius;
 
-    int steps = clamp(uRaySteps, 8, 48);
+    int steps = clamp(uRaySteps, 8, 96);
     float stepLength = (endT - startT) / float(steps);
     stepLength *= clamp(uStepScale, 0.35, 1.5);
 
@@ -107,8 +126,11 @@ vec2 rayMarchLensUv(float screenInfluence,
     closestDistance = centerDistance;
     captured = 0.0;
     bendField = 0.0;
+    kerrField = 0.0;
+    float spinSign = spinSigned();
+    float dragScale = spinSign * uLensAsymmetry * uFrameDragging;
 
-    for (int i = 0; i < 48; ++i) {
+    for (int i = 0; i < 96; ++i) {
         if (i >= steps) {
             break;
         }
@@ -139,11 +161,21 @@ vec2 rayMarchLensUv(float screenInfluence,
         vec3 spinAxis = vec3(0.0, 1.0, 0.0);
         vec3 tangent = safeNormalize(cross(spinAxis, radial),
                                      vec3(1.0, 0.0, 0.0));
-        float spinBend = bend * clamp(uSpin, -1.0, 1.0) *
-                         uLensAsymmetry * 0.22;
+        float frameFalloff = 1.0 -
+                             smoothstep(uWorldEventHorizonRadius * 1.05,
+                                        uWorldPhotonSphereRadius * 5.5,
+                                        distanceToCenter);
+        float photonBandOffset = (distanceToCenter -
+                                  uWorldPhotonSphereRadius) /
+                                 max(uWorldPhotonSphereRadius * 1.15,
+                                     0.01);
+        float photonBand = exp(-lensSqr(photonBandOffset));
+        float spinBend = bend * dragScale *
+                         (0.35 + max(frameFalloff, photonBand) * 0.65);
         direction = safeNormalize(direction + radial * bend +
                                   tangent * spinBend, direction);
         bendField += abs(bend) + abs(spinBend);
+        kerrField += abs(spinBend);
         position += direction * stepLength;
     }
 
@@ -161,41 +193,55 @@ void main() {
                                              photonRadius * 4.2,
                                              r);
     float radialBend = 0.0;
+    float radialKerr = 0.0;
     vec2 radialUv = radialLensUv(lensPos, dir, r, eventRadius,
                                  photonRadius, screenInfluence,
-                                 radialBend);
+                                 radialBend, radialKerr);
     radialUv = clamp(radialUv, vec2(0.001), vec2(0.999));
 
     float closestDistance = uWorldPhotonSphereRadius * 12.0;
     float captured = 0.0;
     float rayBend = radialBend;
+    float kerrField = radialKerr;
     vec2 sampleUv = radialUv;
     if (uRayMarchEnabled == 1 && screenInfluence > 0.001) {
         sampleUv = rayMarchLensUv(screenInfluence, closestDistance,
-                                  captured, rayBend);
+                                  captured, rayBend, kerrField);
     }
 
     vec3 color = texture(uScene, sampleUv).rgb;
 
     float ringWidth = max(photonRadius * 0.08, 0.002);
-    float screenRing = exp(-pow((r - photonRadius) / ringWidth, 2.0));
-    float outerRing = exp(-pow((r - photonRadius * 1.18) /
-                               max(ringWidth * 1.7, 0.002), 2.0));
+    float screenRing = exp(-lensSqr((r - photonRadius) / ringWidth));
+    float outerRing = exp(-lensSqr((r - photonRadius * 1.18) /
+                                   max(ringWidth * 1.7, 0.002)));
     float worldRingWidth = max(uWorldPhotonSphereRadius * 0.10, 0.01);
-    float worldRing = exp(-pow((closestDistance - uWorldPhotonSphereRadius) /
-                               worldRingWidth, 2.0)) * screenInfluence;
+    float worldRing = exp(-lensSqr((closestDistance -
+                                    uWorldPhotonSphereRadius) /
+                                   worldRingWidth)) * screenInfluence;
     float ring = max(screenRing, worldRing);
 
     vec2 tangent2 = vec2(-dir.y, dir.x);
-    float ringSkew = 1.0 + clamp(uSpin, -1.0, 1.0) * uLensAsymmetry *
-                     dot(tangent2, vec2(1.0, 0.0)) * 0.45;
-    ringSkew = clamp(ringSkew, 0.45, 1.65);
-    vec3 ringColor = vec3(1.5, 0.82, 0.38) * ring * ringSkew +
-                     vec3(0.55, 0.72, 1.25) * outerRing * 0.25;
+    float spinSign = spinSigned();
+    float spinMagnitude = abs(spinSign);
+    float side = dot(tangent2, vec2(1.0, 0.0));
+    float kerrBias = spinSign * side * uLensAsymmetry * uRingAsymmetry;
+    float ringSkew = 1.0 + kerrBias * (0.42 + screenInfluence * 0.58) +
+                     clamp(kerrField * 0.08, 0.0, 0.35);
+    ringSkew = clamp(ringSkew, 0.28, 2.35);
+    vec3 hotRing = vec3(1.85, 0.90, 0.34);
+    vec3 coolRing = vec3(0.58, 0.74, 1.35);
+    vec3 ringTint = mix(coolRing, hotRing,
+                        smoothstep(-0.55, 0.55, kerrBias));
+    vec3 ringColor = ringTint * ring * ringSkew +
+                     vec3(0.55, 0.72, 1.25) * outerRing *
+                     (0.22 + spinMagnitude * 0.10);
 
-    vec2 shadowOffset = vec2(clamp(uSpin, -1.0, 1.0) * uLensAsymmetry *
-                             eventRadius * 0.24, 0.0);
-    float shadowR = length(lensPos - shadowOffset);
+    vec2 shadowShift = vec2(spinSign * uLensAsymmetry * uShadowOffset *
+                            eventRadius * 0.42, 0.0);
+    vec2 shadowPos = lensPos - shadowShift;
+    shadowPos.y *= 1.0 + spinMagnitude * uShadowOffset * 0.14;
+    float shadowR = length(shadowPos);
     float softness = clamp(uShadowSoftness, 0.02, 0.6);
     float screenShadow = smoothstep(eventRadius * (1.0 - softness),
                                     eventRadius * (1.0 + softness),
@@ -225,6 +271,17 @@ void main() {
                                          uWorldPhotonSphereRadius * 4.0,
                                          closestDistance);
         FragColor = vec4(captured, closest, screenInfluence, 1.0);
+        return;
+    }
+    if (uDebugMode == 5) {
+        float signedShift = clamp(kerrBias * 1.25, -1.0, 1.0);
+        float kerrVis = clamp(kerrField * 16.0 +
+                              abs(kerrBias) * screenInfluence, 0.0, 1.0);
+        vec3 negative = vec3(0.18, 0.48, 1.0);
+        vec3 positive = vec3(1.0, 0.46, 0.12);
+        vec3 debugColor = mix(negative, positive, signedShift * 0.5 + 0.5);
+        FragColor = vec4(vec3(0.02, 0.025, 0.05) + debugColor * kerrVis,
+                         1.0);
         return;
     }
 

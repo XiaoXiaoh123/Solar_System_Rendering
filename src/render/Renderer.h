@@ -34,6 +34,9 @@ public:
         float ringStrength = 0.0f;
         float spin = 0.0f;
         float asymmetry = 0.0f;
+        float frameDragging = 0.55f;
+        float ringAsymmetry = 0.65f;
+        float shadowOffset = 0.35f;
         float shadowSoftness = 0.12f;
         float stepScale = 0.85f;
         float massStrength = 1.0f;

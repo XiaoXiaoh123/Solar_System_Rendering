@@ -30,10 +30,14 @@ struct BlackHoleParams {
     float lensStrength = 0.12f;
     float ringStrength = 0.65f;
     float lensAsymmetry = 0.35f;
+    float frameDragging = 0.55f;
+    float ringAsymmetry = 0.65f;
+    float shadowOffset = 0.35f;
     float shadowSoftness = 0.18f;
+    int lensQuality = 1;
     bool rayMarchLensing = true;
-    int raySteps = 32;
-    float rayStepScale = 0.85f;
+    int raySteps = 28;
+    float rayStepScale = 0.90f;
     float massStrength = 1.0f;
     float captureRadiusScale = 1.0f;
 };

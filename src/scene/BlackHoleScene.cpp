@@ -53,6 +53,68 @@ bool tryParseFloat(const std::string& value, float& out) {
     }
 }
 
+constexpr int kLensQualityFast = 0;
+constexpr int kLensQualityBalanced = 1;
+constexpr int kLensQualityHigh = 2;
+
+int clampLensQuality(int quality) {
+    return std::clamp(quality, kLensQualityFast, kLensQualityHigh);
+}
+
+const char* lensQualityName(int quality) {
+    switch (clampLensQuality(quality)) {
+    case kLensQualityFast:
+        return "Fast";
+    case kLensQualityHigh:
+        return "High";
+    case kLensQualityBalanced:
+    default:
+        return "Balanced";
+    }
+}
+
+bool lensQualityUsesRayMarch(int quality) {
+    return clampLensQuality(quality) != kLensQualityFast;
+}
+
+int minRayStepsForQuality(int quality) {
+    return clampLensQuality(quality) == kLensQualityHigh ? 32 : 8;
+}
+
+int maxRayStepsForQuality(int quality) {
+    switch (clampLensQuality(quality)) {
+    case kLensQualityFast:
+        return 8;
+    case kLensQualityHigh:
+        return 96;
+    case kLensQualityBalanced:
+    default:
+        return 32;
+    }
+}
+
+void applyLensQualityDefaults(BlackHoleParams& params, int quality) {
+    params.lensQuality = clampLensQuality(quality);
+    params.rayMarchLensing = lensQualityUsesRayMarch(params.lensQuality);
+    if (params.lensQuality == kLensQualityFast) {
+        params.raySteps = 8;
+        params.rayStepScale = 1.00f;
+    } else if (params.lensQuality == kLensQualityHigh) {
+        params.raySteps = 72;
+        params.rayStepScale = 0.68f;
+    } else {
+        params.raySteps = 28;
+        params.rayStepScale = 0.90f;
+    }
+}
+
+int effectiveRaySteps(const BlackHoleParams& params) {
+    int quality = clampLensQuality(params.lensQuality);
+    return std::clamp(params.raySteps,
+                      minRayStepsForQuality(quality),
+                      maxRayStepsForQuality(quality));
+}
+
 void assignParam(BlackHoleParams& params,
                  const std::string& key,
                  float value) {
@@ -76,8 +138,22 @@ void assignParam(BlackHoleParams& params,
     else if (key == "lensStrength") params.lensStrength = value;
     else if (key == "ringStrength") params.ringStrength = value;
     else if (key == "lensAsymmetry") params.lensAsymmetry = value;
+    else if (key == "frameDragging") params.frameDragging = value;
+    else if (key == "ringAsymmetry") params.ringAsymmetry = value;
+    else if (key == "shadowOffset") params.shadowOffset = value;
     else if (key == "shadowSoftness") params.shadowSoftness = value;
-    else if (key == "rayMarchLensing") params.rayMarchLensing = value > 0.5f;
+    else if (key == "lensQuality") {
+        params.lensQuality = static_cast<int>(value);
+        params.rayMarchLensing = lensQualityUsesRayMarch(params.lensQuality);
+    }
+    else if (key == "rayMarchLensing") {
+        params.rayMarchLensing = value > 0.5f;
+        if (params.rayMarchLensing && params.lensQuality == kLensQualityFast) {
+            params.lensQuality = kLensQualityBalanced;
+        } else if (!params.rayMarchLensing) {
+            params.lensQuality = kLensQualityFast;
+        }
+    }
     else if (key == "raySteps") params.raySteps = static_cast<int>(value);
     else if (key == "rayStepScale") params.rayStepScale = value;
     else if (key == "massStrength") params.massStrength = value;
@@ -150,12 +226,16 @@ BlackHoleParams presetParams(int presetIndex) {
         params.lensStrength = 0.23f;
         params.ringStrength = 1.15f;
         params.lensAsymmetry = 0.18f;
+        params.frameDragging = 0.28f;
+        params.ringAsymmetry = 0.55f;
+        params.shadowOffset = 0.28f;
         params.shadowSoftness = 0.24f;
-        params.raySteps = 40;
-        params.rayStepScale = 0.78f;
+        applyLensQualityDefaults(params, kLensQualityHigh);
+        params.raySteps = 56;
+        params.rayStepScale = 0.72f;
         params.massStrength = 1.35f;
     } else if (presetIndex == 2) {
-        params.spin = 0.95f;
+        params.spin = 0.98f;
         params.diskInclination = 14.0f;
         params.temperatureInner = 1.25f;
         params.temperatureOuter = 0.18f;
@@ -170,10 +250,14 @@ BlackHoleParams presetParams(int presetIndex) {
         params.plasmaContrast = 1.18f;
         params.lensStrength = 0.16f;
         params.ringStrength = 0.82f;
-        params.lensAsymmetry = 0.78f;
+        params.lensAsymmetry = 0.95f;
+        params.frameDragging = 1.15f;
+        params.ringAsymmetry = 1.05f;
+        params.shadowOffset = 0.85f;
         params.shadowSoftness = 0.16f;
-        params.raySteps = 36;
-        params.rayStepScale = 0.86f;
+        applyLensQualityDefaults(params, kLensQualityHigh);
+        params.raySteps = 72;
+        params.rayStepScale = 0.68f;
         params.massStrength = 1.05f;
     } else if (presetIndex == 3) {
         params.spin = 0.45f;
@@ -194,9 +278,11 @@ BlackHoleParams presetParams(int presetIndex) {
         params.lensStrength = 0.10f;
         params.ringStrength = 0.38f;
         params.lensAsymmetry = 0.12f;
+        params.frameDragging = 0.18f;
+        params.ringAsymmetry = 0.25f;
+        params.shadowOffset = 0.18f;
         params.shadowSoftness = 0.18f;
-        params.raySteps = 24;
-        params.rayStepScale = 0.90f;
+        applyLensQualityDefaults(params, kLensQualityFast);
         params.massStrength = 0.72f;
     } else if (presetIndex == 4) {
         params.spin = 0.72f;
@@ -217,7 +303,11 @@ BlackHoleParams presetParams(int presetIndex) {
         params.lensStrength = 0.15f;
         params.ringStrength = 0.75f;
         params.lensAsymmetry = 0.45f;
+        params.frameDragging = 0.75f;
+        params.ringAsymmetry = 0.80f;
+        params.shadowOffset = 0.55f;
         params.shadowSoftness = 0.22f;
+        applyLensQualityDefaults(params, kLensQualityBalanced);
         params.raySteps = 32;
         params.rayStepScale = 0.82f;
         params.massStrength = 1.0f;
@@ -332,8 +422,13 @@ void BlackHoleScene::rebuildDiskMesh() {
     m_params.backLightStrength = std::max(0.0f, m_params.backLightStrength);
     m_params.plasmaContrast = std::max(0.0f, m_params.plasmaContrast);
     m_params.lensAsymmetry = std::clamp(m_params.lensAsymmetry, 0.0f, 1.0f);
+    m_params.frameDragging = std::clamp(m_params.frameDragging, 0.0f, 1.5f);
+    m_params.ringAsymmetry = std::clamp(m_params.ringAsymmetry, 0.0f, 1.5f);
+    m_params.shadowOffset = std::clamp(m_params.shadowOffset, 0.0f, 1.2f);
     m_params.shadowSoftness = std::clamp(m_params.shadowSoftness, 0.02f, 0.6f);
-    m_params.raySteps = std::clamp(m_params.raySteps, 8, 48);
+    m_params.lensQuality = clampLensQuality(m_params.lensQuality);
+    m_params.rayMarchLensing = lensQualityUsesRayMarch(m_params.lensQuality);
+    m_params.raySteps = effectiveRaySteps(m_params);
     m_params.rayStepScale = std::clamp(m_params.rayStepScale, 0.35f, 1.5f);
     m_params.massStrength = std::clamp(m_params.massStrength, 0.0f, 3.0f);
     m_params.captureRadiusScale = std::clamp(m_params.captureRadiusScale,
@@ -487,10 +582,11 @@ void BlackHoleScene::drawControls(Camera& camera) {
         "Ray Bend",
         "Photon Ring",
         "Shadow Mask",
-        "Ray Closest"
+        "Ray Closest",
+        "Kerr Shift"
     };
     if (ImGui::Combo("Debug Preset", &m_debugPresetIndex,
-                     debugPresets, 9)) {
+                     debugPresets, 10)) {
         applyDebugPreset(m_debugPresetIndex);
     }
 
@@ -555,25 +651,45 @@ void BlackHoleScene::drawControls(Camera& camera) {
 
     ImGui::Spacing();
     ImGui::Checkbox("Lens Pass", &m_lensEnabled);
-    ImGui::Checkbox("Schwarzschild March", &m_params.rayMarchLensing);
+    const char* lensQualityModes[] = {
+        "Fast",
+        "Balanced",
+        "High"
+    };
+    int lensQualityIndex = clampLensQuality(m_params.lensQuality);
+    if (ImGui::Combo("Lensing Quality", &lensQualityIndex,
+                     lensQualityModes, 3)) {
+        applyLensQualityDefaults(m_params, lensQualityIndex);
+    }
     const char* lensDebugModes[] = {"Final", "Ray Bend", "Photon Ring",
-                                    "Shadow", "Ray Closest"};
-    ImGui::Combo("Lens Debug", &m_lensDebugMode, lensDebugModes, 5);
+                                    "Shadow", "Ray Closest", "Kerr Shift"};
+    ImGui::Combo("Lens Debug", &m_lensDebugMode, lensDebugModes, 6);
     ImGui::SliderFloat("Lens Strength", &m_params.lensStrength,
                        0.0f, 0.45f, "%.3f");
     ImGui::SliderFloat("Ring Strength", &m_params.ringStrength,
                        0.0f, 2.0f, "%.2f");
     ImGui::SliderFloat("Spin Asymmetry", &m_params.lensAsymmetry,
                        0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Frame Drag", &m_params.frameDragging,
+                       0.0f, 1.5f, "%.2f");
+    ImGui::SliderFloat("Ring Asymmetry", &m_params.ringAsymmetry,
+                       0.0f, 1.5f, "%.2f");
+    ImGui::SliderFloat("Shadow Offset", &m_params.shadowOffset,
+                       0.0f, 1.2f, "%.2f");
     ImGui::SliderFloat("Shadow Softness", &m_params.shadowSoftness,
                        0.02f, 0.6f, "%.2f");
-    ImGui::SliderInt("Ray Steps", &m_params.raySteps, 8, 48);
+    bool rayMarchControls = lensQualityUsesRayMarch(m_params.lensQuality);
+    ImGui::BeginDisabled(!rayMarchControls);
+    ImGui::SliderInt("Ray Steps", &m_params.raySteps,
+                     minRayStepsForQuality(m_params.lensQuality),
+                     maxRayStepsForQuality(m_params.lensQuality));
     ImGui::SliderFloat("Step Scale", &m_params.rayStepScale,
                        0.35f, 1.5f, "%.2f");
     ImGui::SliderFloat("Mass Strength", &m_params.massStrength,
                        0.0f, 3.0f, "%.2f");
     ImGui::SliderFloat("Capture Radius", &m_params.captureRadiusScale,
                        0.75f, 1.6f, "%.2f");
+    ImGui::EndDisabled();
     ImGui::PopItemWidth();
 
     if (diskChanged) {
@@ -676,7 +792,7 @@ void BlackHoleScene::drawTeachingOverlay(const Camera& camera,
         ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.36f, 1.0f),
                            "Teaching View");
         ImGui::Separator();
-        ImGui::TextWrapped("This scene is a real-time approximation: a dark event horizon, a photon-ring glow, a turbulent accretion disk, and a low-cost Schwarzschild-style lensing march.");
+        ImGui::TextWrapped("This scene is a real-time approximation: a dark event horizon, a photon-ring glow, a turbulent accretion disk, Schwarzschild-style lensing march, and Kerr-style spin asymmetry.");
         ImGui::Spacing();
         ImGui::Text("Event horizon radius: %.2f", m_params.eventHorizonRadius);
         ImGui::Text("Photon sphere radius: %.2f", m_params.photonSphereRadius);
@@ -684,11 +800,16 @@ void BlackHoleScene::drawTeachingOverlay(const Camera& camera,
         ImGui::Text("Disk: %.1f - %.1f", m_params.diskInnerRadius,
                     m_params.diskOuterRadius);
         ImGui::Text("Lens strength: %.3f", m_params.lensStrength);
-        ImGui::Text("Ray steps: %d", m_params.raySteps);
+        ImGui::Text("Lensing quality: %s", lensQualityName(m_params.lensQuality));
+        ImGui::Text("Frame drag / ring / shadow: %.2f / %.2f / %.2f",
+                    m_params.frameDragging,
+                    m_params.ringAsymmetry,
+                    m_params.shadowOffset);
+        ImGui::Text("Ray steps: %d", effectiveRaySteps(m_params));
         ImGui::Text("Camera distance: %.1f",
                     glm::length(camera.getPosition()));
         ImGui::Spacing();
-        ImGui::TextWrapped("Use Debug Preset to isolate temperature, Doppler shift, alpha, ray bend, photon ring, shadow mask, or closest ray approach.");
+        ImGui::TextWrapped("Use Debug Preset to isolate temperature, Doppler shift, alpha, ray bend, photon ring, shadow mask, closest ray approach, or Kerr shift.");
     }
     ImGui::End();
 }
@@ -715,8 +836,9 @@ Renderer::LensSettings BlackHoleScene::lensSettings(const Camera& camera,
         return settings;
     }
 
+    int lensQuality = clampLensQuality(m_params.lensQuality);
     settings.enabled = true;
-    settings.rayMarchEnabled = m_params.rayMarchLensing;
+    settings.rayMarchEnabled = lensQualityUsesRayMarch(lensQuality);
     settings.center = centerUv;
     settings.viewProjection = camera.getProjectionMatrix(aspectRatio) *
                               camera.getViewMatrix();
@@ -731,12 +853,15 @@ Renderer::LensSettings BlackHoleScene::lensSettings(const Camera& camera,
     settings.ringStrength = m_params.ringStrength;
     settings.spin = m_params.spin;
     settings.asymmetry = m_params.lensAsymmetry;
+    settings.frameDragging = m_params.frameDragging;
+    settings.ringAsymmetry = m_params.ringAsymmetry;
+    settings.shadowOffset = m_params.shadowOffset;
     settings.shadowSoftness = m_params.shadowSoftness;
     settings.stepScale = m_params.rayStepScale;
     settings.massStrength = m_params.massStrength;
     settings.captureRadiusScale = m_params.captureRadiusScale;
     settings.aspectRatio = aspectRatio;
-    settings.raySteps = m_params.raySteps;
+    settings.raySteps = effectiveRaySteps(m_params);
     settings.debugMode = m_lensDebugMode;
     return settings;
 }

@@ -217,6 +217,12 @@ void Renderer::endScene(const PostProcessSettings& settings,
         m_lensShader->setFloat("uRingStrength", lensSettings.ringStrength);
         m_lensShader->setFloat("uSpin", lensSettings.spin);
         m_lensShader->setFloat("uLensAsymmetry", lensSettings.asymmetry);
+        m_lensShader->setFloat("uFrameDragging",
+                               lensSettings.frameDragging);
+        m_lensShader->setFloat("uRingAsymmetry",
+                               lensSettings.ringAsymmetry);
+        m_lensShader->setFloat("uShadowOffset",
+                               lensSettings.shadowOffset);
         m_lensShader->setFloat("uShadowSoftness", lensSettings.shadowSoftness);
         m_lensShader->setFloat("uStepScale", lensSettings.stepScale);
         m_lensShader->setFloat("uMassStrength", lensSettings.massStrength);

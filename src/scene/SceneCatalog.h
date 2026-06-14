@@ -16,7 +16,7 @@ struct SceneDescriptor {
 
 class SceneCatalog {
 public:
-    static constexpr SceneId defaultScene() { return SceneId::SolarSystem; }
+    static SceneId defaultScene();
     static const std::array<SceneDescriptor, 2>& entries();
     static const SceneDescriptor& descriptor(SceneId id);
     static int indexOf(SceneId id);
